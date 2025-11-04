@@ -558,89 +558,86 @@ static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
   LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
-  uint8_t batteryLevel = GetBatteryLevel();
-  sensor_t sensor_data;
   UTIL_TIMER_Time_t nextTxIn = 0;
-
-#ifdef CAYENNE_LPP
-  uint8_t channel = 0;
-#else
-  uint16_t pressure = 0;
-  int16_t temperature = 0;
-  uint16_t humidity = 0;
   uint32_t i = 0;
-  int32_t latitude = 0;
-  int32_t longitude = 0;
-  uint16_t altitudeGps = 0;
-#endif /* CAYENNE_LPP */
-
-  EnvSensors_Read(&sensor_data);
-
-  APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
-  APP_LOG(TS_ON, VLEVEL_M, "temp: %d\r\n", (int16_t)(sensor_data.temperature));
 
   AppData.Port = LORAWAN_USER_APP_PORT;
 
-#ifdef CAYENNE_LPP
-  CayenneLppReset();
-  CayenneLppAddBarometricPressure(channel++, sensor_data.pressure);
-  CayenneLppAddTemperature(channel++, sensor_data.temperature);
-  CayenneLppAddRelativeHumidity(channel++, (uint16_t)(sensor_data.humidity));
+  // Verificar si hay datos del medidor listos
+  if (meter_data_ready) {
+      APP_LOG(TS_ON, VLEVEL_M, "Parseando y enviando datos del medidor...\r\n");
 
-  if ((LmHandlerParams.ActiveRegion != LORAMAC_REGION_US915) && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AU915)
-      && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AS923))
-  {
-    CayenneLppAddDigitalInput(channel++, GetBatteryLevel());
-    CayenneLppAddDigitalOutput(channel++, AppLedStateOn);
+      // Parsear valores directamente del buffer UART
+      float energia_activa = 0.0f;
+      float potencia_activa = 0.0f;
+      uint32_t numero_serie = 0;
+
+      // Parsear 1.8.0 (Energía activa total)
+      char *pos = strstr(uart_rx_buffer, "1.8.0(");
+      if (pos != NULL) {
+          pos += 6; // Saltar "1.8.0("
+          energia_activa = atof(pos);
+      }
+
+      // Parsear 1.6.0 (Potencia activa)
+      pos = strstr(uart_rx_buffer, "1.6.0(");
+      if (pos != NULL) {
+          pos += 6;
+          potencia_activa = atof(pos);
+      }
+
+      // Parsear C.1.0 (Número de serie)
+      pos = strstr(uart_rx_buffer, "C.1.0(");
+      if (pos != NULL) {
+          pos += 6;
+          numero_serie = atol(pos);
+      }
+
+      APP_LOG(TS_ON, VLEVEL_M, "Energia: %.2f kWh, Potencia: %.3f kW, Serie: %lu\r\n",
+              energia_activa, potencia_activa, numero_serie);
+
+      // Construir payload (14 bytes):
+      // [0-3]: Energia activa (uint32, en Wh)
+      // [4-7]: Número de serie (uint32)
+      // [8-9]: Potencia activa (uint16, en W)
+      // [10]: Batería
+      // [11-13]: Reservado
+
+      uint32_t energia_wh = (uint32_t)(energia_activa * 1000);
+      uint16_t potencia_w = (uint16_t)(potencia_activa * 1000);
+
+      AppData.Buffer[i++] = (energia_wh >> 24) & 0xFF;
+      AppData.Buffer[i++] = (energia_wh >> 16) & 0xFF;
+      AppData.Buffer[i++] = (energia_wh >> 8) & 0xFF;
+      AppData.Buffer[i++] = energia_wh & 0xFF;
+
+      AppData.Buffer[i++] = (numero_serie >> 24) & 0xFF;
+      AppData.Buffer[i++] = (numero_serie >> 16) & 0xFF;
+      AppData.Buffer[i++] = (numero_serie >> 8) & 0xFF;
+      AppData.Buffer[i++] = numero_serie & 0xFF;
+
+      AppData.Buffer[i++] = (potencia_w >> 8) & 0xFF;
+      AppData.Buffer[i++] = potencia_w & 0xFF;
+
+      AppData.Buffer[i++] = GetBatteryLevel();
+      AppData.Buffer[i++] = 0; // Reservado
+      AppData.Buffer[i++] = 0;
+      AppData.Buffer[i++] = 0;
+
+      AppData.BufferSize = i;
+      meter_data_ready = 0; // Marcar como procesado
+
+  } else {
+      // No hay datos nuevos, enviar dummy
+      APP_LOG(TS_ON, VLEVEL_M, "Sin datos nuevos del medidor\r\n");
+      AppData.Buffer[0] = 0xFF;
+      AppData.Buffer[1] = GetBatteryLevel();
+      AppData.BufferSize = 2;
   }
-
-  CayenneLppCopy(AppData.Buffer);
-  AppData.BufferSize = CayenneLppGetSize();
-#else  /* not CAYENNE_LPP */
-  humidity    = (uint16_t)(sensor_data.humidity * 10);            /* in %*10     */
-  temperature = (int16_t)(sensor_data.temperature);
-  pressure = (uint16_t)(sensor_data.pressure * 100 / 10); /* in hPa / 10 */
-
-  AppData.Buffer[i++] = AppLedStateOn;
-  AppData.Buffer[i++] = (uint8_t)((pressure >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(pressure & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(temperature & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)((humidity >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
-
-  if ((LmHandlerParams.ActiveRegion == LORAMAC_REGION_US915) || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AU915)
-      || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AS923))
-  {
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-  }
-  else
-  {
-    latitude = sensor_data.latitude;
-    longitude = sensor_data.longitude;
-
-    AppData.Buffer[i++] = GetBatteryLevel();        /* 1 (very low) to 254 (fully charged) */
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(latitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(longitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((altitudeGps >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(altitudeGps & 0xFF);
-  }
-
-  AppData.BufferSize = i;
-#endif /* CAYENNE_LPP */
 
   if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
   {
     UTIL_TIMER_Stop(&JoinLedTimer);
-#if 0   // XXX:
-    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET); /* LED_RED */
-#endif
   }
 
   status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false);
@@ -663,7 +660,6 @@ static void SendTxData(void)
     UTIL_TIMER_SetPeriod(&TxTimer, MAX(nextTxIn, TxPeriodicity));
     UTIL_TIMER_Start(&TxTimer);
   }
-
   /* USER CODE END SendTxData_1 */
 }
 

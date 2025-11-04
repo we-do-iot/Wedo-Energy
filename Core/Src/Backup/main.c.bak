@@ -109,7 +109,7 @@ int main(void)
   MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
   MX_USART1_UART_Init();
-  // ‚≠ê CONFIGURAR WAKEUP PARA USART1
+  // ‚≠? CONFIGURAR WAKEUP PARA USART1
   UART_WakeUpTypeDef WakeUpSelection;
   WakeUpSelection.WakeUpEvent = UART_WAKEUP_ON_STARTBIT;
   HAL_UARTEx_StopModeWakeUpSourceConfig(&huart1, WakeUpSelection);

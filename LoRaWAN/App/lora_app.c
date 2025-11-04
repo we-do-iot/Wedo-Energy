@@ -34,9 +34,6 @@
 #include "CayenneLpp.h"
 #include "sys_sensors.h"
 #include "flash_if.h"
-#include "usart_if.h"
-#include <stdlib.h>
-#include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
 
 /* USER CODE BEGIN Includes */
 

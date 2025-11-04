@@ -74,8 +74,7 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h \
  ../Core/Inc/adc_if.h ../Core/Inc/adc.h ../Core/Inc/platform.h \
  ../LoRaWAN/App/CayenneLpp.h ../Core/Inc/sys_sensors.h \
- ../Core/Inc/flash_if.h ../Core/Inc/usart_if.h ../Core/Inc/usart.h \
- ../Core/Inc/dma.h
+ ../Core/Inc/flash_if.h
 ../Core/Inc/platform.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wle5xx.h:
@@ -163,6 +162,3 @@ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo
 ../LoRaWAN/App/CayenneLpp.h:
 ../Core/Inc/sys_sensors.h:
 ../Core/Inc/flash_if.h:
-../Core/Inc/usart_if.h:
-../Core/Inc/usart.h:
-../Core/Inc/dma.h:

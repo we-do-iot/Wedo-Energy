@@ -36,14 +36,17 @@
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "usart_if.h"
+#include <stdlib.h>
+#include <string.h>
+#include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
 extern volatile uint8_t meter_data_ready;
-extern volatile uint8_t button_pressed;    // Nueva
-extern UTIL_TIMER_Object_t LedTimer;       // Nueva
+extern volatile uint8_t button_pressed;
+extern UTIL_TIMER_Object_t LedTimer;
 extern char uart_rx_buffer[];
 /* USER CODE END EV */
 
@@ -236,6 +239,24 @@ static void OnRxTimerLedEvent(void *context);
   * @param  context ptr of LED context
   */
 static void OnJoinTimerLedEvent(void *context);
+
+/**
+  * @brief  Parse OBIS float value from buffer
+  * @param  buffer pointer to the OBIS buffer
+  * @param  marker OBIS marker string (e.g., "1.8.0(")
+  * @param  result pointer to store the parsed float value
+  * @retval true if parsing successful, false otherwise
+  */
+static bool ParseOBISFloat(char *buffer, const char *marker, float *result);
+
+/**
+  * @brief  Parse OBIS uint32 value from buffer
+  * @param  buffer pointer to the OBIS buffer
+  * @param  marker OBIS marker string (e.g., "C.1.0(")
+  * @param  result pointer to store the parsed uint32 value
+  * @retval true if parsing successful, false otherwise
+  */
+static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result);
 
 /* USER CODE END PFP */
 
@@ -440,12 +461,13 @@ void LoRaWAN_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+char ledpulado[] = "Led pulsado\r\n";
   switch (GPIO_Pin)
   {
     case Pulsador_Pin:
       // Encender LED
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-
+      HAL_UART_Transmit(&huart1, (uint8_t*)ledpulado, strlen(ledpulado), HAL_MAX_DELAY);
       // Iniciar timer para apagar después de 1 segundo
       UTIL_TIMER_Start(&LedTimer);
 
@@ -554,6 +576,131 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
+/* USER CODE BEGIN PrFD_OBIS_Parser */
+
+/**
+  * @brief  Parse OBIS float value from buffer
+  * @param  buffer pointer to the OBIS buffer
+  * @param  marker OBIS marker string (e.g., "1.8.0(")
+  * @param  result pointer to store the parsed float value
+  * @retval true if parsing successful, false otherwise
+  */
+static bool ParseOBISFloat(char *buffer, const char *marker, float *result)
+{
+  char *pos = strstr(buffer, marker);
+  if (pos == NULL)
+  {
+    return false;
+  }
+
+  // Avanzar después del marcador
+  pos += strlen(marker);
+
+  // Buscar el final del valor numérico (* o ))
+  char *end_pos = pos;
+  while (*end_pos != '\0' && *end_pos != '*' && *end_pos != ')')
+  {
+    // Validar que sea un carácter numérico, punto decimal, o signo
+    if ((*end_pos >= '0' && *end_pos <= '9') || 
+        *end_pos == '.' || 
+        *end_pos == '-' || 
+        *end_pos == '+')
+    {
+      end_pos++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  // Si no encontramos ningún carácter válido, fallar
+  if (end_pos == pos)
+  {
+    return false;
+  }
+
+  // Extraer el substring numérico
+  char temp_buffer[32];
+  uint32_t len = (uint32_t)(end_pos - pos);
+  if (len >= sizeof(temp_buffer))
+  {
+    len = sizeof(temp_buffer) - 1;
+  }
+  
+  strncpy(temp_buffer, pos, len);
+  temp_buffer[len] = '\0';
+
+  // Convertir a float
+  *result = atof(temp_buffer);
+  
+  // Debug: mostrar lo que se parseó
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISFloat('%s') -> '%s' = %f\r\n", marker, temp_buffer, *result);
+  
+  return true;
+}
+
+/**
+  * @brief  Parse OBIS uint32 value from buffer
+  * @param  buffer pointer to the OBIS buffer
+  * @param  marker OBIS marker string (e.g., "C.1.0(")
+  * @param  result pointer to store the parsed uint32 value
+  * @retval true if parsing successful, false otherwise
+  */
+static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result)
+{
+  char *pos = strstr(buffer, marker);
+  if (pos == NULL)
+  {
+    return false;
+  }
+
+  // Avanzar después del marcador
+  pos += strlen(marker);
+
+  // Buscar el final del valor numérico (* o ))
+  char *end_pos = pos;
+  while (*end_pos != '\0' && *end_pos != '*' && *end_pos != ')')
+  {
+    // Validar que sea un carácter numérico
+    if (*end_pos >= '0' && *end_pos <= '9')
+    {
+      end_pos++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  // Si no encontramos ningún carácter válido, fallar
+  if (end_pos == pos)
+  {
+    return false;
+  }
+
+  // Extraer el substring numérico
+  char temp_buffer[32];
+  uint32_t len = (uint32_t)(end_pos - pos);
+  if (len >= sizeof(temp_buffer))
+  {
+    len = sizeof(temp_buffer) - 1;
+  }
+  
+  strncpy(temp_buffer, pos, len);
+  temp_buffer[len] = '\0';
+
+  // Convertir a uint32_t
+  *result = atol(temp_buffer);
+  
+  // Debug: mostrar lo que se parseó
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISUint32('%s') -> '%s' = %lu\r\n", marker, temp_buffer, *result);
+  
+  return true;
+}
+
+/* USER CODE END PrFD_OBIS_Parser */
+
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
@@ -571,30 +718,74 @@ static void SendTxData(void)
       float energia_activa = 0.0f;
       float potencia_activa = 0.0f;
       uint32_t numero_serie = 0;
+      bool parse_success = true;
 
       // Parsear 1.8.0 (Energía activa total)
-      char *pos = strstr(uart_rx_buffer, "1.8.0(");
-      if (pos != NULL) {
-          pos += 6; // Saltar "1.8.0("
-          energia_activa = atof(pos);
+      if (ParseOBISFloat(uart_rx_buffer, "1.8.0(", &energia_activa)) {
+          // Log exitoso sin formato para evitar problemas
+          APP_LOG(TS_ON, VLEVEL_M, "OK: Energia parseada correctamente\r\n");
+      } else {
+          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear 1.8.0 (Energía activa)\r\n");
+          parse_success = false;
       }
 
       // Parsear 1.6.0 (Potencia activa)
-      pos = strstr(uart_rx_buffer, "1.6.0(");
-      if (pos != NULL) {
-          pos += 6;
-          potencia_activa = atof(pos);
+      if (ParseOBISFloat(uart_rx_buffer, "1.6.0(", &potencia_activa)) {
+          APP_LOG(TS_ON, VLEVEL_M, "OK: Potencia parseada correctamente\r\n");
+      } else {
+          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear 1.6.0 (Potencia activa)\r\n");
+          parse_success = false;
       }
 
       // Parsear C.1.0 (Número de serie)
-      pos = strstr(uart_rx_buffer, "C.1.0(");
-      if (pos != NULL) {
-          pos += 6;
-          numero_serie = atol(pos);
+      if (ParseOBISUint32(uart_rx_buffer, "C.1.0(", &numero_serie)) {
+          APP_LOG(TS_ON, VLEVEL_M, "OK: Serie parseada correctamente\r\n");
+      } else {
+          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear C.1.0 (Número de serie)\r\n");
+          parse_success = false;
       }
 
-      APP_LOG(TS_ON, VLEVEL_M, "Energia: %.2f kWh, Potencia: %.3f kW, Serie: %lu\r\n",
-              energia_activa, potencia_activa, numero_serie);
+      // Validar que los valores sean razonables
+      if (parse_success) {
+          // Validación de energía (máximo 10 millones de kWh = 10,000,000 kWh)
+          if (energia_activa < 0.0f || energia_activa > 10000000.0f) {
+              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Energía fuera de rango: %.2f kWh\r\n", energia_activa);
+              parse_success = false;
+          }
+          
+          // Validación de potencia (máximo 100 MW = 100,000 kW)
+          if (potencia_activa < 0.0f || potencia_activa > 100000.0f) {
+              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Potencia fuera de rango: %.3f kW\r\n", potencia_activa);
+              parse_success = false;
+          }
+          
+          // Validación de número de serie (no debe ser 0)
+          if (numero_serie == 0) {
+              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Número de serie inválido: %lu\r\n", numero_serie);
+              parse_success = false;
+          }
+      }
+
+      // Mostrar valores parseados usando múltiples logs para evitar problemas con formato
+      APP_LOG(TS_ON, VLEVEL_M, "Parseo: Energia=");
+      APP_LOG(TS_ON, VLEVEL_M, "%d", (int32_t)energia_activa);
+      APP_LOG(TS_ON, VLEVEL_M, " kWh, Potencia=");
+      APP_LOG(TS_ON, VLEVEL_M, "%d", (int32_t)potencia_activa);
+      APP_LOG(TS_ON, VLEVEL_M, " kW, Serie=");
+      APP_LOG(TS_ON, VLEVEL_M, "%lu", numero_serie);
+      APP_LOG(TS_ON, VLEVEL_M, " Status=");
+      APP_LOG(TS_ON, VLEVEL_M, parse_success ? "OK" : "FAIL");
+      APP_LOG(TS_ON, VLEVEL_M, "\r\n");
+
+      // Si el parseo falló, enviar payload dummy en lugar de datos incorrectos
+      if (!parse_success) {
+          APP_LOG(TS_ON, VLEVEL_M, "Parseo falló, enviando payload dummy\r\n");
+          AppData.Buffer[0] = 0xFF;
+          AppData.Buffer[1] = GetBatteryLevel();
+          AppData.BufferSize = 2;
+          meter_data_ready = 0;
+          goto send_data; // Saltar al envío
+      }
 
       // Construir payload (14 bytes):
       // [0-3]: Energia activa (uint32, en Wh)
@@ -635,6 +826,7 @@ static void SendTxData(void)
       AppData.BufferSize = 2;
   }
 
+send_data:
   if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
   {
     UTIL_TIMER_Stop(&JoinLedTimer);

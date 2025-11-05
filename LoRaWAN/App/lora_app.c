@@ -706,127 +706,131 @@ static void SendTxData(void)
   /* USER CODE BEGIN SendTxData_1 */
   LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
   UTIL_TIMER_Time_t nextTxIn = 0;
-  uint32_t i = 0;
+  uint32_t payload_index = 0;
 
   AppData.Port = LORAWAN_USER_APP_PORT;
 
   // Verificar si hay datos del medidor listos
   if (meter_data_ready) {
-      APP_LOG(TS_ON, VLEVEL_M, "Parseando y enviando datos del medidor...\r\n");
+      APP_LOG(TS_ON, VLEVEL_M, "Construyendo payload TLV desde datos OBIS...\r\n");
 
-      // Parsear valores directamente del buffer UART
-      float energia_activa = 0.0f;
-      float potencia_activa = 0.0f;
-      uint32_t numero_serie = 0;
-      bool parse_success = true;
+      // Variables temporales para parseo
+      float valor_float = 0.0f;
+      uint32_t valor_uint32 = 0;
+      bool parse_ok = false;
 
-      // Parsear 1.8.0 (Energía activa total)
-      if (ParseOBISFloat(uart_rx_buffer, "1.8.0(", &energia_activa)) {
-          // Log exitoso sin formato para evitar problemas
-          APP_LOG(TS_ON, VLEVEL_M, "OK: Energia parseada correctamente\r\n");
-      } else {
-          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear 1.8.0 (Energía activa)\r\n");
-          parse_success = false;
+      // ===== 0x02: Batería (%) - 1 byte =====
+      uint8_t bateria_pct = GetBatteryLevel();
+      AppData.Buffer[payload_index++] = 0x02;  // ID
+      AppData.Buffer[payload_index++] = bateria_pct;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%d%%\r\n", bateria_pct);
+
+      // ===== 0x0A: Energía activa total (15.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "15.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t energia_kwh = (uint32_t)(valor_float);  // kWh a Wh
+          AppData.Buffer[payload_index++] = 0x0A;  // ID
+          AppData.Buffer[payload_index++] = (energia_kwh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (energia_kwh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (energia_kwh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = energia_kwh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0A Activa_Total=%lu Wh\r\n", energia_kwh);
       }
 
-      // Parsear 1.6.0 (Potencia activa)
-      if (ParseOBISFloat(uart_rx_buffer, "1.6.0(", &potencia_activa)) {
-          APP_LOG(TS_ON, VLEVEL_M, "OK: Potencia parseada correctamente\r\n");
-      } else {
-          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear 1.6.0 (Potencia activa)\r\n");
-          parse_success = false;
+      // ===== 0x0B: Energía reactiva total (130.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "130.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t reactiva_kvarh = (uint32_t)(valor_float);  // kVArh a VArh
+          AppData.Buffer[payload_index++] = 0x0B;  // ID
+          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = reactiva_kvarh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0B Reactiva_Total=%lu VArh\r\n", reactiva_kvarh);
       }
 
-      // Parsear C.1.0 (Número de serie)
-      if (ParseOBISUint32(uart_rx_buffer, "C.1.0(", &numero_serie)) {
-          APP_LOG(TS_ON, VLEVEL_M, "OK: Serie parseada correctamente\r\n");
-      } else {
-          APP_LOG(TS_ON, VLEVEL_M, "ERROR: No se pudo parsear C.1.0 (Número de serie)\r\n");
-          parse_success = false;
+      // ===== 0x28: Demanda máxima potencia (1.6.0) - 2 bytes en W =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "1.6.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 65.535f) {
+          uint16_t peak_demand_kw = (uint16_t)(valor_float);  // kW a W
+          AppData.Buffer[payload_index++] = 0x28;  // ID
+          AppData.Buffer[payload_index++] = (peak_demand_kw >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = peak_demand_kw & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x28 Demanda_Max=%u W\r\n", peak_demand_kw);
       }
 
-      // Validar que los valores sean razonables
-      if (parse_success) {
-          // Validación de energía (máximo 10 millones de kWh = 10,000,000 kWh)
-          if (energia_activa < 0.0f || energia_activa > 10000000.0f) {
-              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Energía fuera de rango: %.2f kWh\r\n", energia_activa);
-              parse_success = false;
-          }
-          
-          // Validación de potencia (máximo 100 MW = 100,000 kW)
-          if (potencia_activa < 0.0f || potencia_activa > 100000.0f) {
-              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Potencia fuera de rango: %.3f kW\r\n", potencia_activa);
-              parse_success = false;
-          }
-          
-          // Validación de número de serie (no debe ser 0)
-          if (numero_serie == 0) {
-              APP_LOG(TS_ON, VLEVEL_M, "WARNING: Número de serie inválido: %lu\r\n", numero_serie);
-              parse_success = false;
-          }
+      // ===== 0x3C: Energía activa consumida (1.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "1.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t consumida_kwh = (uint32_t)(valor_float);
+          AppData.Buffer[payload_index++] = 0x3C;  // ID
+          AppData.Buffer[payload_index++] = (consumida_kwh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (consumida_kwh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (consumida_kwh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = consumida_kwh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3C Activa_Consumida=%lu Wh\r\n", consumida_kwh);
       }
 
-      // Mostrar valores parseados usando múltiples logs para evitar problemas con formato
-      APP_LOG(TS_ON, VLEVEL_M, "Parseo: Energia=");
-      APP_LOG(TS_ON, VLEVEL_M, "%d", (int32_t)energia_activa);
-      APP_LOG(TS_ON, VLEVEL_M, " kWh, Potencia=");
-      APP_LOG(TS_ON, VLEVEL_M, "%d", (int32_t)potencia_activa);
-      APP_LOG(TS_ON, VLEVEL_M, " kW, Serie=");
-      APP_LOG(TS_ON, VLEVEL_M, "%lu", numero_serie);
-      APP_LOG(TS_ON, VLEVEL_M, " Status=");
-      APP_LOG(TS_ON, VLEVEL_M, parse_success ? "OK" : "FAIL");
-      APP_LOG(TS_ON, VLEVEL_M, "\r\n");
-
-      // Si el parseo falló, enviar payload dummy en lugar de datos incorrectos
-      if (!parse_success) {
-          APP_LOG(TS_ON, VLEVEL_M, "Parseo falló, enviando payload dummy\r\n");
-          AppData.Buffer[0] = 0xFF;
-          AppData.Buffer[1] = GetBatteryLevel();
-          AppData.BufferSize = 2;
-          meter_data_ready = 0;
-          goto send_data; // Saltar al envío
+      // ===== 0x3D: Energía activa generada (2.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "2.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t generada_kwh = (uint32_t)(valor_float);
+          AppData.Buffer[payload_index++] = 0x3D;  // ID
+          AppData.Buffer[payload_index++] = (generada_kwh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (generada_kwh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (generada_kwh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = generada_kwh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3D Activa_Generada=%lu Wh\r\n", generada_kwh);
       }
 
-      // Construir payload (14 bytes):
-      // [0-3]: Energia activa (uint32, en Wh)
-      // [4-7]: Número de serie (uint32)
-      // [8-9]: Potencia activa (uint16, en W)
-      // [10]: Batería
-      // [11-13]: Reservado
+      // ===== 0x3E: Energía reactiva consumida (3.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "3.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t reactiva_cons_kvarh = (uint32_t)(valor_float);
+          AppData.Buffer[payload_index++] = 0x3E;  // ID
+          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = reactiva_cons_kvarh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3E Reactiva_Consumida=%lu VArh\r\n", reactiva_cons_kvarh);
+      }
 
-      uint32_t energia_wh = (uint32_t)(energia_activa * 1000);
-      uint16_t potencia_w = (uint16_t)(potencia_activa * 1000);
+      // ===== 0x3F: Energía reactiva generada (4.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(uart_rx_buffer, "4.8.0(", &valor_float);
+      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+          uint32_t reactiva_gen_kvarh = (uint32_t)(valor_float);
+          AppData.Buffer[payload_index++] = 0x3F;  // ID
+          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = reactiva_gen_kvarh & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3F Reactiva_Generada=%lu VArh\r\n", reactiva_gen_kvarh);
+      }
 
-      AppData.Buffer[i++] = (energia_wh >> 24) & 0xFF;
-      AppData.Buffer[i++] = (energia_wh >> 16) & 0xFF;
-      AppData.Buffer[i++] = (energia_wh >> 8) & 0xFF;
-      AppData.Buffer[i++] = energia_wh & 0xFF;
+      // ===== 0x5A: Número de serie (C.1.0) - 4 bytes =====
+      parse_ok = ParseOBISUint32(uart_rx_buffer, "C.1.0(", &valor_uint32);
+      if (parse_ok && valor_uint32 != 0) {
+          AppData.Buffer[payload_index++] = 0x5A;  // ID
+          AppData.Buffer[payload_index++] = (valor_uint32 >> 24) & 0xFF;
+          AppData.Buffer[payload_index++] = (valor_uint32 >> 16) & 0xFF;
+          AppData.Buffer[payload_index++] = (valor_uint32 >> 8) & 0xFF;
+          AppData.Buffer[payload_index++] = valor_uint32 & 0xFF;
+          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x5A Numero_Serie=%lu\r\n", valor_uint32);
+      }
 
-      AppData.Buffer[i++] = (numero_serie >> 24) & 0xFF;
-      AppData.Buffer[i++] = (numero_serie >> 16) & 0xFF;
-      AppData.Buffer[i++] = (numero_serie >> 8) & 0xFF;
-      AppData.Buffer[i++] = numero_serie & 0xFF;
+      AppData.BufferSize = payload_index;
+      meter_data_ready = 0;
 
-      AppData.Buffer[i++] = (potencia_w >> 8) & 0xFF;
-      AppData.Buffer[i++] = potencia_w & 0xFF;
-
-      AppData.Buffer[i++] = GetBatteryLevel();
-      AppData.Buffer[i++] = 0; // Reservado
-      AppData.Buffer[i++] = 0;
-      AppData.Buffer[i++] = 0;
-
-      AppData.BufferSize = i;
-      meter_data_ready = 0; // Marcar como procesado
+      APP_LOG(TS_ON, VLEVEL_M, "Payload TLV construido: %d bytes\r\n", payload_index);
 
   } else {
-      // No hay datos nuevos, enviar dummy
-      APP_LOG(TS_ON, VLEVEL_M, "Sin datos nuevos del medidor\r\n");
-      AppData.Buffer[0] = 0xFF;
+      // Sin datos del medidor, enviar solo batería
+      APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor, enviando solo bateria\r\n");
+      AppData.Buffer[0] = 0x02;  // ID Batería
       AppData.Buffer[1] = GetBatteryLevel();
       AppData.BufferSize = 2;
   }
 
-send_data:
   if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
   {
     UTIL_TIMER_Stop(&JoinLedTimer);
@@ -854,7 +858,6 @@ send_data:
   }
   /* USER CODE END SendTxData_1 */
 }
-
 static void OnTxTimerEvent(void *context)
 {
   /* USER CODE BEGIN OnTxTimerEvent_1 */

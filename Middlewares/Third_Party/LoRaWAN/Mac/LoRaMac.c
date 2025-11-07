@@ -43,6 +43,7 @@
 #include "utilities.h"
 #include "Region.h"
 #include "LoRaMacClassB.h"
+#include <stdio.h>
 #include "secure-element.h"
 #include "LoRaMacTest.h"
 #include "LoRaMacConfirmQueue.h"
@@ -1354,7 +1355,70 @@ static void ProcessRadioRxDone( void )
                 applyCFList.JoinChannel = MacCtx.Channel;
 #endif /* LORAMAC_VERSION */
 
+                // Debug: print CFList bytes (if any) before applying
+                if( applyCFList.Size > 0 )
+                {
+                    MW_LOG( TS_ON, VLEVEL_M, "JoinAccept: CFList size=%d\r\n", applyCFList.Size );
+                    {
+                        char hexBuf[3 * LORAMAC_PHY_MAXPAYLOAD + 1];
+                        size_t hexIdx = 0;
+                        memset( hexBuf, 0, sizeof( hexBuf ) );
+                        for( uint8_t i = 0; i < applyCFList.Size; i++ )
+                        {
+                            hexIdx += snprintf( &hexBuf[hexIdx], sizeof( hexBuf ) - hexIdx, "%02X ", applyCFList.Payload[i] );
+                            if( hexIdx >= sizeof( hexBuf ) ) break;
+                        }
+                        MW_LOG( TS_ON, VLEVEL_M, "JoinAccept: CFList bytes: %s\r\n", hexBuf );
+                    }
+                }
+
                 RegionApplyCFList( Nvm.MacGroup2.Region, &applyCFList );
+
+                // Debug: read out the channel masks after applying CFList
+                {
+                    GetPhyParams_t getPhyMask;
+                    PhyParam_t phyMask;
+                    getPhyMask.Attribute = PHY_CHANNELS_MASK;
+                    phyMask = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask );
+                    MW_LOG( TS_ON, VLEVEL_M, "Post-JoinApply ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                            phyMask.ChannelsMask[0], phyMask.ChannelsMask[1], phyMask.ChannelsMask[2],
+                            phyMask.ChannelsMask[3], phyMask.ChannelsMask[4], phyMask.ChannelsMask[5] );
+                }
+
+#if ( LORA_FORCE_SUBBAND > 0 )
+                /* If we force a subband at build-time, re-apply it after CFList is applied
+                 * so that gateway CFList won't override the forced selection. */
+                if( Nvm.MacGroup2.Region == LORAMAC_REGION_AU915 )
+                {
+                    uint16_t forcedMask[6] = { 0,0,0,0,0,0 };
+                    uint8_t sb = ( uint8_t ) LORA_FORCE_SUBBAND;
+                    if( sb >= 1 && sb <= 8 )
+                    {
+                        uint8_t bankIndex = ( sb - 1 ) / 2;
+                        if( ( ( sb - 1 ) % 2 ) == 0 )
+                        {
+                            forcedMask[bankIndex] = 0x00FF;
+                        }
+                        else
+                        {
+                            forcedMask[bankIndex] = 0xFF00;
+                        }
+                        ChanMaskSetParams_t chanParams;
+                        chanParams.ChannelsMaskIn = forcedMask;
+                        chanParams.ChannelsMaskType = CHANNELS_MASK;
+                        RegionChanMaskSet( Nvm.MacGroup2.Region, &chanParams );
+                        /* Log resulting mask */
+                        GetPhyParams_t getPhyMask2;
+                        PhyParam_t phyMask2;
+                        getPhyMask2.Attribute = PHY_CHANNELS_MASK;
+                        phyMask2 = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask2 );
+                        MW_LOG( TS_ON, VLEVEL_M, "Forced subband %d re-applied after JoinAccept. ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                                sb,
+                                phyMask2.ChannelsMask[0], phyMask2.ChannelsMask[1], phyMask2.ChannelsMask[2],
+                                phyMask2.ChannelsMask[3], phyMask2.ChannelsMask[4], phyMask2.ChannelsMask[5] );
+                    }
+                }
+#endif /* LORA_FORCE_SUBBAND */
 
                 Nvm.MacGroup2.NetworkActivation = ACTIVATION_TYPE_OTAA;
 
@@ -2795,9 +2859,33 @@ static void ProcessMacCommands( uint8_t *payload, uint8_t macIndex, uint8_t comm
                     linkAdrReq.CurrentNbRep = Nvm.MacGroup2.MacParams.ChannelsNbTrans;
                     linkAdrReq.Version = Nvm.MacGroup2.Version;
 
-                    // Process the ADR requests
-                    status = RegionLinkAdrReq( Nvm.MacGroup2.Region, &linkAdrReq, &linkAdrDatarate,
-                                               &linkAdrTxPower, &linkAdrNbRep, &linkAdrNbBytesParsed );
+            // Debug: print LinkADR request bytes
+            MW_LOG( TS_ON, VLEVEL_M, "LinkADR: PayloadSize=%d\r\n", linkAdrReq.PayloadSize );
+            MW_LOG( TS_ON, VLEVEL_M, "LinkADR bytes: ");
+            for( uint8_t i = 0; i < linkAdrReq.PayloadSize; i++ )
+            {
+            MW_LOG( TS_ON, VLEVEL_M, "%02X ", linkAdrReq.Payload[i] );
+            }
+            MW_LOG( TS_ON, VLEVEL_M, "\r\n" );
+
+            // Process the ADR requests
+            status = RegionLinkAdrReq( Nvm.MacGroup2.Region, &linkAdrReq, &linkAdrDatarate,
+                           &linkAdrTxPower, &linkAdrNbRep, &linkAdrNbBytesParsed );
+
+            // Debug: print result of LinkADR parsing
+            MW_LOG( TS_ON, VLEVEL_M, "LinkADR result: status=0x%02X datarate=%d txPower=%d nbRep=%d parsed=%d\r\n",
+                status, linkAdrDatarate, linkAdrTxPower, linkAdrNbRep, linkAdrNbBytesParsed );
+            MW_LOG( TS_ON, VLEVEL_M, "Post-LinkADR DR=%d TXPower=%d NbTrans=%d\r\n",
+                Nvm.MacGroup1.ChannelsDatarate, Nvm.MacGroup1.ChannelsTxPower, Nvm.MacGroup2.MacParams.ChannelsNbTrans );
+            {
+            GetPhyParams_t getPhyMask;
+            PhyParam_t phyMask;
+            getPhyMask.Attribute = PHY_CHANNELS_MASK;
+            phyMask = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask );
+            MW_LOG( TS_ON, VLEVEL_M, "Post-LinkADR ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                phyMask.ChannelsMask[0], phyMask.ChannelsMask[1], phyMask.ChannelsMask[2],
+                phyMask.ChannelsMask[3], phyMask.ChannelsMask[4], phyMask.ChannelsMask[5] );
+            }
 
                     if( ( status & 0x07 ) == 0x07 )
                     {
@@ -2851,9 +2939,70 @@ static void ProcessMacCommands( uint8_t *payload, uint8_t macIndex, uint8_t comm
                             linkAdrReq.PayloadSize = 5;
                         }
 
-                        // Process the ADR requests
-                        status = RegionLinkAdrReq( Nvm.MacGroup2.Region, &linkAdrReq, &linkAdrDatarate,
-                                                &linkAdrTxPower, &linkAdrNbRep, &linkAdrNbBytesParsed );
+            // Debug: print LinkADR (iter) request bytes
+            MW_LOG( TS_ON, VLEVEL_M, "LinkADR(iter): PayloadSize=%d\r\n", linkAdrReq.PayloadSize );
+            {
+                /* Build a single-line hex string to avoid multiple timestamped MW_LOG calls */
+                char hexBuf[3 * LORAMAC_PHY_MAXPAYLOAD + 1];
+                size_t hexIdx = 0;
+                memset( hexBuf, 0, sizeof( hexBuf ) );
+                for( uint8_t i = 0; i < linkAdrReq.PayloadSize; i++ )
+                {
+                    hexIdx += snprintf( &hexBuf[hexIdx], sizeof( hexBuf ) - hexIdx, "%02X ", linkAdrReq.Payload[i] );
+                    if( hexIdx >= sizeof( hexBuf ) ) break;
+                }
+                MW_LOG( TS_ON, VLEVEL_M, "LinkADR(iter) bytes: %s\r\n", hexBuf );
+            }
+
+            // Process the ADR requests
+            status = RegionLinkAdrReq( Nvm.MacGroup2.Region, &linkAdrReq, &linkAdrDatarate,
+                        &linkAdrTxPower, &linkAdrNbRep, &linkAdrNbBytesParsed );
+
+            MW_LOG( TS_ON, VLEVEL_M, "LinkADR(iter) result: status=0x%02X datarate=%d txPower=%d nbRep=%d parsed=%d\r\n",
+                status, linkAdrDatarate, linkAdrTxPower, linkAdrNbRep, linkAdrNbBytesParsed );
+            MW_LOG( TS_ON, VLEVEL_M, "Post-LinkADR(iter) DR=%d TXPower=%d NbTrans=%d\r\n",
+                Nvm.MacGroup1.ChannelsDatarate, Nvm.MacGroup1.ChannelsTxPower, Nvm.MacGroup2.MacParams.ChannelsNbTrans );
+            {
+                GetPhyParams_t getPhyMask;
+                PhyParam_t phyMask;
+                getPhyMask.Attribute = PHY_CHANNELS_MASK;
+                phyMask = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask );
+                MW_LOG( TS_ON, VLEVEL_M, "Post-LinkADR(iter) ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                    phyMask.ChannelsMask[0], phyMask.ChannelsMask[1], phyMask.ChannelsMask[2],
+                    phyMask.ChannelsMask[3], phyMask.ChannelsMask[4], phyMask.ChannelsMask[5] );
+            }
+            #if ( LORA_FORCE_SUBBAND > 0 )
+                /* If forced, re-apply here to avoid LinkADR changing it */
+                if( Nvm.MacGroup2.Region == LORAMAC_REGION_AU915 )
+                {
+                    uint16_t forcedMask[6] = { 0,0,0,0,0,0 };
+                    uint8_t sb = ( uint8_t ) LORA_FORCE_SUBBAND;
+                    if( sb >= 1 && sb <= 8 )
+                    {
+                        uint8_t bankIndex = ( sb - 1 ) / 2;
+                        if( ( ( sb - 1 ) % 2 ) == 0 )
+                        {
+                            forcedMask[bankIndex] = 0x00FF;
+                        }
+                        else
+                        {
+                            forcedMask[bankIndex] = 0xFF00;
+                        }
+                        ChanMaskSetParams_t chanParams;
+                        chanParams.ChannelsMaskIn = forcedMask;
+                        chanParams.ChannelsMaskType = CHANNELS_MASK;
+                        RegionChanMaskSet( Nvm.MacGroup2.Region, &chanParams );
+                        GetPhyParams_t getPhyMask3;
+                        PhyParam_t phyMask3;
+                        getPhyMask3.Attribute = PHY_CHANNELS_MASK;
+                        phyMask3 = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask3 );
+                        MW_LOG( TS_ON, VLEVEL_M, "Forced subband %d re-applied after LinkADR. ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                                sb,
+                                phyMask3.ChannelsMask[0], phyMask3.ChannelsMask[1], phyMask3.ChannelsMask[2],
+                                phyMask3.ChannelsMask[3], phyMask3.ChannelsMask[4], phyMask3.ChannelsMask[5] );
+                    }
+                }
+            #endif /* LORA_FORCE_SUBBAND */
 
                         if( ( status & 0x07 ) == 0x07 )
                         {
@@ -4106,6 +4255,78 @@ static LoRaMacStatus_t SendFrameOnChannel( uint8_t channel )
 #endif /* LORAMAC_VERSION */
 
     // Send now
+    /* Debug prints: show channel mask, frequency/DR, ADR details and payload */
+    {
+        GetPhyParams_t getPhyMask;
+        PhyParam_t phyMask;
+        GetPhyParams_t getPhyCh;
+        PhyParam_t phyCh;
+        uint32_t freq = 0;
+
+        /* Get channel list to read frequency */
+        getPhyCh.Attribute = PHY_CHANNELS;
+        phyCh = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyCh );
+        if( phyCh.Channels != NULL )
+        {
+            freq = phyCh.Channels[channel].Frequency;
+        }
+
+        /* Get channels mask */
+        getPhyMask.Attribute = PHY_CHANNELS_MASK;
+        phyMask = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask );
+
+        MW_LOG( TS_ON, VLEVEL_M, "-- TX Debug: chan=%d freq=%u DR=%d PktLen=%d\r\n", channel, freq, Nvm.MacGroup1.ChannelsDatarate, MacCtx.PktBufferLen );
+        MW_LOG( TS_ON, VLEVEL_M, "ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                phyMask.ChannelsMask[0], phyMask.ChannelsMask[1], phyMask.ChannelsMask[2],
+                phyMask.ChannelsMask[3], phyMask.ChannelsMask[4], phyMask.ChannelsMask[5] );
+
+        /* ADR details */
+    /* Note: tiny vsnprintf used in this project does not support '%lu' on all builds,
+     * use %u with explicit cast to unsigned int to ensure proper formatting. */
+    MW_LOG( TS_ON, VLEVEL_M, "ADR: AdrCtrlOn=%d AdrAckCounter=%u AdrAckLimit=%d AdrAckDelay=%d\r\n",
+        Nvm.MacGroup2.AdrCtrlOn, ( unsigned int )Nvm.MacGroup1.AdrAckCounter,
+        Nvm.MacGroup2.MacParams.AdrAckLimit, Nvm.MacGroup2.MacParams.AdrAckDelay );
+        MW_LOG( TS_ON, VLEVEL_M, "DR/Power/NbTrans: DR=%d TXPower=%d NbTrans=%d\r\n",
+                Nvm.MacGroup1.ChannelsDatarate, Nvm.MacGroup1.ChannelsTxPower, Nvm.MacGroup2.MacParams.ChannelsNbTrans );
+
+        /* Application payload (if present) - build hex string and log once to avoid
+         * multiple MW_LOG calls (which interleave timestamps). */
+        if( MacCtx.AppDataSize > 0 )
+        {
+            char hexBuf[2 * LORAMAC_PHY_MAXPAYLOAD + 1];
+            size_t hexIdx = 0;
+            memset( hexBuf, 0, sizeof( hexBuf ) );
+            for( uint16_t i = 0; i < MacCtx.AppDataSize; i++ )
+            {
+                /* write two hex chars per byte */
+                hexIdx += snprintf( &hexBuf[hexIdx], sizeof( hexBuf ) - hexIdx, "%02X", MacCtx.AppData[i] );
+                if( hexIdx >= sizeof( hexBuf ) ) break;
+            }
+            MW_LOG( TS_ON, VLEVEL_M, "App payload (%d): %s\r\n", MacCtx.AppDataSize, hexBuf );
+        }
+        else
+        {
+            /* If no app data, print FRMPayload (may contain MAC commands) */
+            if( MacCtx.TxMsg.Type == LORAMAC_MSG_TYPE_DATA )
+            {
+                uint16_t frmSize = MacCtx.TxMsg.Message.Data.FRMPayloadSize;
+                if( frmSize > 0 )
+                {
+                    char hexBuf[2 * LORAMAC_PHY_MAXPAYLOAD + 1];
+                    size_t hexIdx = 0;
+                    memset( hexBuf, 0, sizeof( hexBuf ) );
+                    for( uint16_t i = 0; i < frmSize; i++ )
+                    {
+                        uint8_t b = MacCtx.TxMsg.Message.Data.FRMPayload[i];
+                        hexIdx += snprintf( &hexBuf[hexIdx], sizeof( hexBuf ) - hexIdx, "%02X", b );
+                        if( hexIdx >= sizeof( hexBuf ) ) break;
+                    }
+                    MW_LOG( TS_ON, VLEVEL_M, "FRM payload (%d): %s\r\n", frmSize, hexBuf );
+                }
+            }
+        }
+    }
+
     Radio.Send( MacCtx.PktBuffer, MacCtx.PktBufferLen );
 
     return LORAMAC_STATUS_OK;
@@ -4229,6 +4450,52 @@ static LoRaMacStatus_t RestoreNvmData( void )
     // from NVM and we thus need to synchronize the radio. The same function
     // is invoked in LoRaMacInitialization.
     Radio.SetPublicNetwork( Nvm.MacGroup2.PublicNetwork );
+#if ( LORA_FORCE_SUBBAND > 0 )
+    {
+        /*
+         * If the build requests forcing a subband, apply it after restoring NVM
+         * so that persisted channel masks do not override the forced mask.
+         * This currently supports AU915 only (same mapping as RegionAU915InitDefaults).
+         */
+        if( Nvm.MacGroup2.Region == LORAMAC_REGION_AU915 )
+        {
+            uint16_t forcedMask[6] = { 0, 0, 0, 0, 0, 0 };
+            uint8_t sb = ( uint8_t ) LORA_FORCE_SUBBAND; /* 1..8 expected */
+            if( sb >= 1 && sb <= 8 )
+            {
+                uint8_t bankIndex = ( sb - 1 ) / 2; /* 0..3 */
+                if( ( ( sb - 1 ) % 2 ) == 0 )
+                {
+                    /* lower 8 bits */
+                    forcedMask[bankIndex] = 0x00FF;
+                }
+                else
+                {
+                    /* upper 8 bits */
+                    forcedMask[bankIndex] = 0xFF00;
+                }
+                /* disable 500 kHz channels */
+                forcedMask[4] = 0x0000;
+                forcedMask[5] = 0x0000;
+
+                ChanMaskSetParams_t chanParams;
+                chanParams.ChannelsMaskIn = forcedMask;
+                chanParams.ChannelsMaskType = CHANNELS_MASK;
+                RegionChanMaskSet( Nvm.MacGroup2.Region, &chanParams );
+
+                /* Log resulting mask */
+                GetPhyParams_t getPhyMask;
+                PhyParam_t phyMask;
+                getPhyMask.Attribute = PHY_CHANNELS_MASK;
+                phyMask = RegionGetPhyParam( Nvm.MacGroup2.Region, &getPhyMask );
+                MW_LOG( TS_ON, VLEVEL_M, "Forced subband %d applied after NVM restore. ChannelsMask: %04X %04X %04X %04X %04X %04X\r\n",
+                        sb,
+                        phyMask.ChannelsMask[0], phyMask.ChannelsMask[1], phyMask.ChannelsMask[2],
+                        phyMask.ChannelsMask[3], phyMask.ChannelsMask[4], phyMask.ChannelsMask[5] );
+            }
+        }
+    }
+#endif /* LORA_FORCE_SUBBAND */
 #endif /* CONTEXT_MANAGEMENT_ENABLED == 1 */
 
     return LORAMAC_STATUS_OK;

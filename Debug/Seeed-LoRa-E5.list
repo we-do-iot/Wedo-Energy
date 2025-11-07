@@ -41,9 +41,9 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  18 .debug_line   00043916  00000000  00000000  000a9ef4  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .debug_str    000ceea4  00000000  00000000  000ed80a  2**0
+ 19 .debug_str    000ceea5  00000000  00000000  000ed80a  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 20 .comment      00000043  00000000  00000000  001bc6ae  2**0
+ 20 .comment      00000043  00000000  00000000  001bc6af  2**0
                   CONTENTS, READONLY
  21 .debug_frame  0000ee58  00000000  00000000  001bc6f4  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
@@ -31169,46 +31169,46 @@ static void OnTxPeriodicityChanged(uint32_t periodicity)
 
   /* USER CODE END OnTxPeriodicityChanged_1 */
   TxPeriodicity = periodicity;
- 800b810:	4a0d      	ldr	r2, [pc, #52]	@ (800b848 <OnTxPeriodicityChanged+0x40>)
+ 800b810:	4a0c      	ldr	r2, [pc, #48]	@ (800b844 <OnTxPeriodicityChanged+0x3c>)
  800b812:	687b      	ldr	r3, [r7, #4]
  800b814:	6013      	str	r3, [r2, #0]
 
   if (TxPeriodicity == 0)
- 800b816:	4b0c      	ldr	r3, [pc, #48]	@ (800b848 <OnTxPeriodicityChanged+0x40>)
+ 800b816:	4b0b      	ldr	r3, [pc, #44]	@ (800b844 <OnTxPeriodicityChanged+0x3c>)
  800b818:	681b      	ldr	r3, [r3, #0]
  800b81a:	2b00      	cmp	r3, #0
- 800b81c:	d103      	bne.n	800b826 <OnTxPeriodicityChanged+0x1e>
+ 800b81c:	d102      	bne.n	800b824 <OnTxPeriodicityChanged+0x1c>
   {
     /* Revert to application default periodicity */
     TxPeriodicity = APP_TX_DUTYCYCLE;
- 800b81e:	4b0a      	ldr	r3, [pc, #40]	@ (800b848 <OnTxPeriodicityChanged+0x40>)
- 800b820:	f64e 2260 	movw	r2, #60000	@ 0xea60
- 800b824:	601a      	str	r2, [r3, #0]
+ 800b81e:	4b09      	ldr	r3, [pc, #36]	@ (800b844 <OnTxPeriodicityChanged+0x3c>)
+ 800b820:	4a09      	ldr	r2, [pc, #36]	@ (800b848 <OnTxPeriodicityChanged+0x40>)
+ 800b822:	601a      	str	r2, [r3, #0]
   }
 
   /* Update timer periodicity */
   UTIL_TIMER_Stop(&TxTimer);
- 800b826:	4809      	ldr	r0, [pc, #36]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
- 800b828:	f014 fc96 	bl	8020158 <UTIL_TIMER_Stop>
+ 800b824:	4809      	ldr	r0, [pc, #36]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
+ 800b826:	f014 fc97 	bl	8020158 <UTIL_TIMER_Stop>
   UTIL_TIMER_SetPeriod(&TxTimer, TxPeriodicity);
- 800b82c:	4b06      	ldr	r3, [pc, #24]	@ (800b848 <OnTxPeriodicityChanged+0x40>)
- 800b82e:	681b      	ldr	r3, [r3, #0]
- 800b830:	4619      	mov	r1, r3
- 800b832:	4806      	ldr	r0, [pc, #24]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
- 800b834:	f014 fd00 	bl	8020238 <UTIL_TIMER_SetPeriod>
+ 800b82a:	4b06      	ldr	r3, [pc, #24]	@ (800b844 <OnTxPeriodicityChanged+0x3c>)
+ 800b82c:	681b      	ldr	r3, [r3, #0]
+ 800b82e:	4619      	mov	r1, r3
+ 800b830:	4806      	ldr	r0, [pc, #24]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
+ 800b832:	f014 fd01 	bl	8020238 <UTIL_TIMER_SetPeriod>
   UTIL_TIMER_Start(&TxTimer);
- 800b838:	4804      	ldr	r0, [pc, #16]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
- 800b83a:	f014 fc1f 	bl	802007c <UTIL_TIMER_Start>
+ 800b836:	4805      	ldr	r0, [pc, #20]	@ (800b84c <OnTxPeriodicityChanged+0x44>)
+ 800b838:	f014 fc20 	bl	802007c <UTIL_TIMER_Start>
   /* USER CODE BEGIN OnTxPeriodicityChanged_2 */
 
   /* USER CODE END OnTxPeriodicityChanged_2 */
 }
- 800b83e:	bf00      	nop
- 800b840:	3708      	adds	r7, #8
- 800b842:	46bd      	mov	sp, r7
- 800b844:	bd80      	pop	{r7, pc}
- 800b846:	bf00      	nop
- 800b848:	2000009c 	.word	0x2000009c
+ 800b83c:	bf00      	nop
+ 800b83e:	3708      	adds	r7, #8
+ 800b840:	46bd      	mov	sp, r7
+ 800b842:	bd80      	pop	{r7, pc}
+ 800b844:	2000009c 	.word	0x2000009c
+ 800b848:	000927c0 	.word	0x000927c0
  800b84c:	20000890 	.word	0x20000890
 
 0800b850 <OnTxFrameCtrlChanged>:

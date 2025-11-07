@@ -118,6 +118,13 @@ extern "C" {
  */
 #define HYBRID_ENABLED                                  0
 
+/*
+ * If set to a value between 1 and 8 the AU915/US915 region will force the device
+ * to enable only that sub-band (1..8) by default. 0 = disabled (take defaults / gateway CFList).
+ * Sub-bands mapping: 1 => channels 0..7, 2 => channels 8..15, ..., 8 => channels 56..63
+ */
+#define LORA_FORCE_SUBBAND                              2
+
 /*!
  * @brief Define the read access of the keys in memory
  * @note  this value should be disabled after the development process

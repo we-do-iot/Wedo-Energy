@@ -2,7 +2,7 @@
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:104:20:GetTimeOnAir	1
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:113:12:RegionAU915GetPhyParam	43
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:371:6:RegionAU915SetBandTxDone	1
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:384:6:RegionAU915InitDefaults	12
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:384:6:RegionAU915InitDefaults	9
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:518:6:RegionAU915Verify	8
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:568:6:RegionAU915ApplyCFList	5
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAU915.c:598:6:RegionAU915ChanMaskSet	4

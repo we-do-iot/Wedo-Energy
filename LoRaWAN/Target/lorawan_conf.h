@@ -123,7 +123,7 @@ extern "C" {
  * to enable only that sub-band (1..8) by default. 0 = disabled (take defaults / gateway CFList).
  * Sub-bands mapping: 1 => channels 0..7, 2 => channels 8..15, ..., 8 => channels 56..63
  */
-#define LORA_FORCE_SUBBAND                              2
+#define LORA_FORCE_SUBBAND                              0
 
 /*!
  * @brief Define the read access of the keys in memory

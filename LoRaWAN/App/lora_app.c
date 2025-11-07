@@ -719,11 +719,34 @@ static void SendTxData(void)
       uint32_t valor_uint32 = 0;
       bool parse_ok = false;
 
-      // ===== 0x02: Batería (%) - 1 byte =====
-      uint8_t bateria_pct = GetBatteryLevel();
-      AppData.Buffer[payload_index++] = 0x02;  // ID
-      AppData.Buffer[payload_index++] = bateria_pct;
+    // ===== 0x02: Batería (%) - 1 byte =====
+    uint8_t bateria_level_lora = GetBatteryLevel();
+    uint8_t bateria_pct = 0xFF;
+    /* Convert LoRa battery level (1..254) to percentage (0..100).
+     Keep 0xFF as 'not measured' sentinel. */
+    if (bateria_level_lora == 0xFF)
+    {
+      bateria_pct = 0xFF;
+    }
+    else if (bateria_level_lora == 0)
+    {
+      bateria_pct = 0;
+    }
+    else
+    {
+      const uint16_t LORAWAN_MAX_BAT = 254U;
+      bateria_pct = (uint8_t)((((uint32_t)bateria_level_lora) * 100U + (LORAWAN_MAX_BAT/2U)) / LORAWAN_MAX_BAT);
+    }
+    AppData.Buffer[payload_index++] = 0x02;  // ID
+    AppData.Buffer[payload_index++] = bateria_pct;
+    if (bateria_pct == 0xFF)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=NA\r\n");
+    }
+    else
+    {
       APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%d%%\r\n", bateria_pct);
+    }
 
       // ===== 0x0A: Energía activa total (15.8.0) - 4 bytes en Wh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "15.8.0(", &valor_float);
@@ -826,9 +849,34 @@ static void SendTxData(void)
   } else {
       // Sin datos del medidor, enviar solo batería
       APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor, enviando solo bateria\r\n");
-      AppData.Buffer[0] = 0x02;  // ID Batería
-      AppData.Buffer[1] = GetBatteryLevel();
+    AppData.Buffer[0] = 0x02;  // ID Batería
+    {
+      uint8_t bateria_level_lora = GetBatteryLevel();
+      uint8_t bateria_pct = 0xFF;
+      const uint16_t LORAWAN_MAX_BAT = 254U;
+      if (bateria_level_lora == 0xFF)
+      {
+        bateria_pct = 0xFF;
+      }
+      else if (bateria_level_lora == 0)
+      {
+        bateria_pct = 0;
+      }
+      else
+      {
+        bateria_pct = (uint8_t)((((uint32_t)bateria_level_lora) * 100U + (LORAWAN_MAX_BAT/2U)) / LORAWAN_MAX_BAT);
+      }
+      AppData.Buffer[1] = bateria_pct;
       AppData.BufferSize = 2;
+      if (bateria_pct == 0xFF)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=NA\r\n");
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%d%%\r\n", bateria_pct);
+      }
+    }
   }
 
   if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))

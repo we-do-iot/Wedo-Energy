@@ -217,6 +217,9 @@ uint8_t GetBatteryLevel(void)
     batteryLevel = (uint8_t)level;
   }
 
+  /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
+
   /* USER CODE BEGIN GetBatteryLevel_2 */
 
   /* USER CODE END GetBatteryLevel_2 */

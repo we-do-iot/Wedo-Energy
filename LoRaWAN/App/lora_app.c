@@ -634,8 +634,8 @@ static bool ParseOBISFloat(char *buffer, const char *marker, float *result)
   // Convertir a float
   *result = atof(temp_buffer);
   
-  // Debug: mostrar lo que se parseó
-  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISFloat('%s') -> '%s' = %f\r\n", marker, temp_buffer, *result);
+    // Debug: mostrar lo que se parseó (printf %f no soportado en tiny printf, imprimimos la cadena)
+    APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISFloat('%s') -> '%s'\r\n", marker, temp_buffer);
   
   return true;
 }

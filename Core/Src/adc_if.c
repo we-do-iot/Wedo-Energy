@@ -181,6 +181,10 @@ uint16_t SYS_GetBatteryLevel(void)
      Use integer math to avoid floats. */
   batteryLevelmV = (uint16_t)((pin_mV * 403U) / 100U);
 
+  /* Debug: print ADC internals to help diagnose first-uplink anomalies */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: SYS_GetBatteryLevel: measVref=%lu vdd_mV=%lu raw_pin=%lu pin_mV=%lu batt_mV=%u\r\n",
+    (unsigned long)measVref, (unsigned long)vdd_mV, (unsigned long)raw_pin, (unsigned long)pin_mV, batteryLevelmV);
+
   return batteryLevelmV;
 }
 

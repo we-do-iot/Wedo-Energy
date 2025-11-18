@@ -40,11 +40,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
-/* USER CODE END Includes */
 
 /* Fallback defines: if the project or board headers do not define these, provide
-  conservative defaults to allow compilation. If your project defines them
-  elsewhere these will be ignored. */
+   conservative defaults to allow compilation. If your project defines them
+   elsewhere these will be ignored. */
 #ifndef LED_PERIOD_TIME
 #define LED_PERIOD_TIME 200U
 #endif
@@ -57,6 +56,7 @@
 /* Default NVM base address fallback (tune to your board's flash map if needed) */
 #define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
 #endif
+/* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */

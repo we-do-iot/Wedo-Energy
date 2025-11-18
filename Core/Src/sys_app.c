@@ -167,6 +167,8 @@ uint8_t GetBatteryLevel(void)
     return 0xFF; /* LoRaMAC expects 0xFF for no measurement in many implementations */
   }
 
+  /* USER CODE BEGIN GetBatteryLevel_2 */
+
   /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
   {
     const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
@@ -219,8 +221,6 @@ uint8_t GetBatteryLevel(void)
 
   /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
   APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
-
-  /* USER CODE BEGIN GetBatteryLevel_2 */
 
   /* USER CODE END GetBatteryLevel_2 */
 

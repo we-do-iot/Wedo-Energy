@@ -138,6 +138,8 @@ int16_t SYS_GetTemperatureLevel(void)
 
 uint16_t SYS_GetBatteryLevel(void)
 {
+  /* USER CODE BEGIN SYS_GetBatteryLevel_1 */
+
   uint16_t batteryLevelmV = 0;
   uint32_t measVref = 0;
   uint32_t vdd_mV = 0;
@@ -187,6 +189,8 @@ uint16_t SYS_GetBatteryLevel(void)
     (unsigned int)measVref, (unsigned int)vdd_mV, (unsigned int)raw_pin, (unsigned int)pin_mV, (unsigned int)batteryLevelmV);
 
   return batteryLevelmV;
+
+  /* USER CODE END SYS_GetBatteryLevel_1 */
 }
 
 /* Private Functions Definition -----------------------------------------------*/

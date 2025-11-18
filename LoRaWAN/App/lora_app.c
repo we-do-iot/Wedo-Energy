@@ -42,6 +42,22 @@
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
 /* USER CODE END Includes */
 
+/* Fallback defines: if the project or board headers do not define these, provide
+  conservative defaults to allow compilation. If your project defines them
+  elsewhere these will be ignored. */
+#ifndef LED_PERIOD_TIME
+#define LED_PERIOD_TIME 200U
+#endif
+
+#ifndef JOIN_TIME
+#define JOIN_TIME 600000U
+#endif
+
+#ifndef LORAWAN_NVM_BASE_ADDRESS
+/* Default NVM base address fallback (tune to your board's flash map if needed) */
+#define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
+#endif
+
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
 extern volatile uint8_t meter_data_ready;
@@ -67,125 +83,8 @@ typedef enum TxEventType_e
   /* USER CODE BEGIN TxEventType_t */
 
   /* USER CODE END TxEventType_t */
+
 } TxEventType_t;
-
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/**
-  * LEDs period value of the timer in ms
-  */
-#define LED_PERIOD_TIME 500
-
-/**
-  * Join switch period value of the timer in ms
-  */
-#define JOIN_TIME 2000
-
-/*---------------------------------------------------------------------------*/
-/*                             LoRaWAN NVM configuration                     */
-/*---------------------------------------------------------------------------*/
-/**
-  * @brief LoRaWAN NVM Flash address
-  * @note last 2 sector of a 128kBytes device
-  */
-#define LORAWAN_NVM_BASE_ADDRESS                    ((void *)0x0803F000UL)
-
-/* USER CODE BEGIN PD */
-static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private function prototypes -----------------------------------------------*/
-/**
-  * @brief  LoRa End Node send request
-  */
-static void SendTxData(void);
-
-/**
-  * @brief  TX timer callback function
-  * @param  context ptr of timer context
-  */
-static void OnTxTimerEvent(void *context);
-
-/**
-  * @brief  join event callback function
-  * @param  joinParams status of join
-  */
-static void OnJoinRequest(LmHandlerJoinParams_t *joinParams);
-
-/**
-  * @brief callback when LoRaWAN application has sent a frame
-  * @brief  tx event callback function
-  * @param  params status of last Tx
-  */
-static void OnTxData(LmHandlerTxParams_t *params);
-
-/**
-  * @brief callback when LoRaWAN application has received a frame
-  * @param appData data received in the last Rx
-  * @param params status of last Rx
-  */
-static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params);
-
-/**
-  * @brief callback when LoRaWAN Beacon status is updated
-  * @param params status of Last Beacon
-  */
-static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params);
-
-/**
-  * @brief callback when system time has been updated
-  */
-static void OnSysTimeUpdate(void);
-
-/**
-  * @brief callback when LoRaWAN application Class is changed
-  * @param deviceClass new class
-  */
-static void OnClassChange(DeviceClass_t deviceClass);
-
-/**
-  * @brief  LoRa store context in Non Volatile Memory
-  */
-static void StoreContext(void);
-
-/**
-  * @brief  stop current LoRa execution to switch into non default Activation mode
-  */
-static void StopJoin(void);
-
-/**
-  * @brief  Join switch timer callback function
-  * @param  context ptr of Join switch context
-  */
-static void OnStopJoinTimerEvent(void *context);
-
-/**
-  * @brief  Notifies the upper layer that the NVM context has changed
-  * @param  state Indicates if we are storing (true) or restoring (false) the NVM context
-  */
-static void OnNvmDataChange(LmHandlerNvmContextStates_t state);
-
-/**
-  * @brief  Store the NVM Data context to the Flash
-  * @param  nvm ptr on nvm structure
-  * @param  nvm_size number of data bytes which were stored
-  */
-static void OnStoreContextRequest(void *nvm, uint32_t nvm_size);
-
-/**
-  * @brief  Restore the NVM Data context from the Flash
-  * @param  nvm ptr on nvm structure
-  * @param  nvm_size number of data bytes which were restored
-  */
-static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size);
 
 /**
   * Will be called each time a Radio IRQ is handled by the MAC layer
@@ -257,6 +156,31 @@ static bool ParseOBISFloat(char *buffer, const char *marker, float *result);
   * @retval true if parsing successful, false otherwise
   */
 static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result);
+
+/* Forward declarations for callbacks and local functions used by the LmHandler
+  These must be visible before the LmHandlerCallbacks structure initialization. */
+static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size);
+static void OnStoreContextRequest(void *nvm, uint32_t nvm_size);
+static void OnNvmDataChange(LmHandlerNvmContextStates_t state);
+static void OnJoinRequest(LmHandlerJoinParams_t *joinParams);
+static void OnTxData(LmHandlerTxParams_t *params);
+static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params);
+static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params);
+static void OnSysTimeUpdate(void);
+static void OnClassChange(DeviceClass_t deviceClass);
+static void SendTxData(void);
+static void OnTxTimerEvent(void *context);
+static void StoreContext(void);
+static void StopJoin(void);
+static void OnStopJoinTimerEvent(void *context);
+static void OnTxTimerLedEvent(void *context);
+static void OnRxTimerLedEvent(void *context);
+static void OnJoinTimerLedEvent(void *context);
+static void OnTxPeriodicityChanged(uint32_t periodicity);
+static void OnTxFrameCtrlChanged(LmHandlerMsgTypes_t isTxConfirmed);
+static void OnPingSlotPeriodicityChanged(uint8_t pingSlotPeriodicity);
+static void OnSystemReset(void);
+
 
 /* USER CODE END PFP */
 
@@ -361,6 +285,9 @@ static UTIL_TIMER_Object_t RxLedTimer;
   * @brief Timer to handle the application Join Led to toggle
   */
 static UTIL_TIMER_Object_t JoinLedTimer;
+
+/* Human-readable RX slot strings used in debug logs */
+static const char *slotStrings[] = { "NONE", "RX1", "RX2", "C", "P", "MULTI" };
 
 /* USER CODE END PV */
 
@@ -652,7 +579,6 @@ static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result)
   char *pos = strstr(buffer, marker);
   if (pos == NULL)
   {
-    return false;
   }
 
   // Avanzar después del marcador
@@ -694,7 +620,7 @@ static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result)
   *result = atol(temp_buffer);
   
   // Debug: mostrar lo que se parseó
-  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISUint32('%s') -> '%s' = %lu\r\n", marker, temp_buffer, *result);
+    APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISUint32('%s') -> '%s' = %u\r\n", marker, temp_buffer, (unsigned int)*result);
   
   return true;
 }
@@ -745,101 +671,113 @@ static void SendTxData(void)
     }
     else
     {
-      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%d%%\r\n", bateria_pct);
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%u%%\r\n", (unsigned int)bateria_pct);
+    }
+
+    /* ===== 0x04: network_state (1 byte) - detect external 3.3V on PB5 ===== */
+    {
+      uint8_t net_state = 0;
+      if (HAL_GPIO_ReadPin(LED2_GPIO_Port, LED2_Pin) == GPIO_PIN_SET)
+      {
+        net_state = 1; /* external 3.3V present */
+      }
+      AppData.Buffer[payload_index++] = 0x04; /* ID */
+      AppData.Buffer[payload_index++] = net_state;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x04 network_state=%u\r\n", (unsigned int)net_state);
     }
 
       // ===== 0x0A: Energía activa total (15.8.0) - 4 bytes en Wh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "15.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t energia_kwh = (uint32_t)(valor_float);  // kWh a Wh
-          AppData.Buffer[payload_index++] = 0x0A;  // ID
-          AppData.Buffer[payload_index++] = (energia_kwh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (energia_kwh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (energia_kwh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = energia_kwh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0A Activa_Total=%lu Wh\r\n", energia_kwh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t energia_kwh = (uint32_t)(valor_float);  // kWh a Wh
+      AppData.Buffer[payload_index++] = 0x0A;  // ID
+      AppData.Buffer[payload_index++] = (energia_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (energia_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (energia_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = energia_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0A Activa_Total=%u Wh\r\n", (unsigned int)energia_kwh);
+    }
 
       // ===== 0x0B: Energía reactiva total (130.8.0) - 4 bytes en VArh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "130.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t reactiva_kvarh = (uint32_t)(valor_float);  // kVArh a VArh
-          AppData.Buffer[payload_index++] = 0x0B;  // ID
-          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_kvarh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = reactiva_kvarh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0B Reactiva_Total=%lu VArh\r\n", reactiva_kvarh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_kvarh = (uint32_t)(valor_float);  // kVArh a VArh
+      AppData.Buffer[payload_index++] = 0x0B;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0B Reactiva_Total=%u VArh\r\n", (unsigned int)reactiva_kvarh);
+    }
 
       // ===== 0x28: Demanda máxima potencia (1.6.0) - 2 bytes en W =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "1.6.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 65.535f) {
-          uint16_t peak_demand_kw = (uint16_t)(valor_float);  // kW a W
-          AppData.Buffer[payload_index++] = 0x28;  // ID
-          AppData.Buffer[payload_index++] = (peak_demand_kw >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = peak_demand_kw & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x28 Demanda_Max=%u W\r\n", peak_demand_kw);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 65.535f) {
+      uint16_t peak_demand_kw = (uint16_t)(valor_float);  // kW a W
+      AppData.Buffer[payload_index++] = 0x28;  // ID
+      AppData.Buffer[payload_index++] = (peak_demand_kw >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = peak_demand_kw & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x28 Demanda_Max=%u W\r\n", (unsigned int)peak_demand_kw);
+    }
 
       // ===== 0x3C: Energía activa consumida (1.8.0) - 4 bytes en Wh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "1.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t consumida_kwh = (uint32_t)(valor_float);
-          AppData.Buffer[payload_index++] = 0x3C;  // ID
-          AppData.Buffer[payload_index++] = (consumida_kwh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (consumida_kwh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (consumida_kwh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = consumida_kwh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3C Activa_Consumida=%lu Wh\r\n", consumida_kwh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t consumida_kwh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3C;  // ID
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = consumida_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3C Activa_Consumida=%u Wh\r\n", (unsigned int)consumida_kwh);
+    }
 
       // ===== 0x3D: Energía activa generada (2.8.0) - 4 bytes en Wh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "2.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t generada_kwh = (uint32_t)(valor_float);
-          AppData.Buffer[payload_index++] = 0x3D;  // ID
-          AppData.Buffer[payload_index++] = (generada_kwh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (generada_kwh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (generada_kwh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = generada_kwh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3D Activa_Generada=%lu Wh\r\n", generada_kwh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t generada_kwh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3D;  // ID
+      AppData.Buffer[payload_index++] = (generada_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (generada_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (generada_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = generada_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3D Activa_Generada=%u Wh\r\n", (unsigned int)generada_kwh);
+    }
 
       // ===== 0x3E: Energía reactiva consumida (3.8.0) - 4 bytes en VArh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "3.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t reactiva_cons_kvarh = (uint32_t)(valor_float);
-          AppData.Buffer[payload_index++] = 0x3E;  // ID
-          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = reactiva_cons_kvarh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3E Reactiva_Consumida=%lu VArh\r\n", reactiva_cons_kvarh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_cons_kvarh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3E;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_cons_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3E Reactiva_Consumida=%u VArh\r\n", (unsigned int)reactiva_cons_kvarh);
+    }
 
       // ===== 0x3F: Energía reactiva generada (4.8.0) - 4 bytes en VArh =====
       parse_ok = ParseOBISFloat(uart_rx_buffer, "4.8.0(", &valor_float);
-      if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
-          uint32_t reactiva_gen_kvarh = (uint32_t)(valor_float);
-          AppData.Buffer[payload_index++] = 0x3F;  // ID
-          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = reactiva_gen_kvarh & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3F Reactiva_Generada=%lu VArh\r\n", reactiva_gen_kvarh);
-      }
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_gen_kvarh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3F;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_gen_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3F Reactiva_Generada=%u VArh\r\n", (unsigned int)reactiva_gen_kvarh);
+    }
 
       // ===== 0x5A: Número de serie (C.1.0) - 4 bytes =====
-      parse_ok = ParseOBISUint32(uart_rx_buffer, "C.1.0(", &valor_uint32);
-      if (parse_ok && valor_uint32 != 0) {
-          AppData.Buffer[payload_index++] = 0x5A;  // ID
-          AppData.Buffer[payload_index++] = (valor_uint32 >> 24) & 0xFF;
-          AppData.Buffer[payload_index++] = (valor_uint32 >> 16) & 0xFF;
-          AppData.Buffer[payload_index++] = (valor_uint32 >> 8) & 0xFF;
-          AppData.Buffer[payload_index++] = valor_uint32 & 0xFF;
-          APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x5A Numero_Serie=%lu\r\n", valor_uint32);
-      }
+    parse_ok = ParseOBISUint32(uart_rx_buffer, "C.1.0(", &valor_uint32);
+    if (parse_ok && valor_uint32 != 0) {
+      AppData.Buffer[payload_index++] = 0x5A;  // ID
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = valor_uint32 & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x5A Numero_Serie=%u\r\n", (unsigned int)valor_uint32);
+    }
 
       AppData.BufferSize = payload_index;
       meter_data_ready = 0;
@@ -849,8 +787,8 @@ static void SendTxData(void)
   } else {
       // Sin datos del medidor, enviar solo batería
       APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor, enviando solo bateria\r\n");
-    AppData.Buffer[0] = 0x02;  // ID Batería
     {
+      /* Fallback: send battery + network_state */
       uint8_t bateria_level_lora = GetBatteryLevel();
       uint8_t bateria_pct = 0xFF;
       const uint16_t LORAWAN_MAX_BAT = 254U;
@@ -866,16 +804,28 @@ static void SendTxData(void)
       {
         bateria_pct = (uint8_t)((((uint32_t)bateria_level_lora) * 100U + (LORAWAN_MAX_BAT/2U)) / LORAWAN_MAX_BAT);
       }
+      AppData.Buffer[0] = 0x02;  // ID Batería
       AppData.Buffer[1] = bateria_pct;
-      AppData.BufferSize = 2;
+
+      /* Add network_state TLV (0x04) */
+      uint8_t net_state = 0;
+      if (HAL_GPIO_ReadPin(LED2_GPIO_Port, LED2_Pin) == GPIO_PIN_SET)
+      {
+        net_state = 1;
+      }
+      AppData.Buffer[2] = 0x04;
+      AppData.Buffer[3] = net_state;
+      AppData.BufferSize = 4;
+
       if (bateria_pct == 0xFF)
       {
         APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=NA\r\n");
       }
       else
       {
-        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%d%%\r\n", bateria_pct);
+        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%u%%\r\n", (unsigned int)bateria_pct);
       }
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x04 network_state=%u\r\n", (unsigned int)net_state);
     }
   }
 

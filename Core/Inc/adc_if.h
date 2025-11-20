@@ -39,22 +39,24 @@ extern "C" {
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
+/* USER CODE BEGIN EC */
+
 /**
   * @brief Typical Li-ion battery nominal values (mV)
   * We measure the battery through a resistor divider and then reconstruct the
   * real battery voltage in software. The battery maximum is ~4.2V for Li-ion.
   */
 #define BAT_LI_ION                  ((uint32_t) 4200)
+
 /**
   * @brief Maximum battery level in mV (Li-ion)
   */
 #define VDD_BAT                     BAT_LI_ION
+
 /**
   * @brief Minimum battery level in mV for reporting (below this is considered empty)
   */
 #define VDD_MIN                     3000
-
-/* USER CODE BEGIN EC */
 
 /* USER CODE END EC */
 

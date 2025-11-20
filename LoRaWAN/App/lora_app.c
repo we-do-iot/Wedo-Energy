@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
+#include "obis_helpers.h"
 
 /* Fallback defines: if the project or board headers do not define these, provide
    conservative defaults to allow compilation. If your project defines them
@@ -146,16 +147,7 @@ static void OnJoinTimerLedEvent(void *context);
   * @param  result pointer to store the parsed float value
   * @retval true if parsing successful, false otherwise
   */
-static bool ParseOBISFloat(char *buffer, const char *marker, float *result);
-
-/**
-  * @brief  Parse OBIS uint32 value from buffer
-  * @param  buffer pointer to the OBIS buffer
-  * @param  marker OBIS marker string (e.g., "C.1.0(")
-  * @param  result pointer to store the parsed uint32 value
-  * @retval true if parsing successful, false otherwise
-  */
-static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result);
+/* OBIS parser moved to LoRaWAN/App/obis_helpers.c to avoid being overwritten by CubeMX */
 
 /* Forward declarations for callbacks and local functions used by the LmHandler
   These must be visible before the LmHandlerCallbacks structure initialization. */
@@ -505,125 +497,7 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
 /* USER CODE BEGIN PrFD_OBIS_Parser */
 
-/**
-  * @brief  Parse OBIS float value from buffer
-  * @param  buffer pointer to the OBIS buffer
-  * @param  marker OBIS marker string (e.g., "1.8.0(")
-  * @param  result pointer to store the parsed float value
-  * @retval true if parsing successful, false otherwise
-  */
-static bool ParseOBISFloat(char *buffer, const char *marker, float *result)
-{
-  char *pos = strstr(buffer, marker);
-  if (pos == NULL)
-  {
-    return false;
-  }
-
-  // Avanzar después del marcador
-  pos += strlen(marker);
-
-  // Buscar el final del valor numérico (* o ))
-  char *end_pos = pos;
-  while (*end_pos != '\0' && *end_pos != '*' && *end_pos != ')')
-  {
-    // Validar que sea un carácter numérico, punto decimal, o signo
-    if ((*end_pos >= '0' && *end_pos <= '9') || 
-        *end_pos == '.' || 
-        *end_pos == '-' || 
-        *end_pos == '+')
-    {
-      end_pos++;
-    }
-    else
-    {
-      break;
-    }
-  }
-
-  // Si no encontramos ningún carácter válido, fallar
-  if (end_pos == pos)
-  {
-    return false;
-  }
-
-  // Extraer el substring numérico
-  char temp_buffer[32];
-  uint32_t len = (uint32_t)(end_pos - pos);
-  if (len >= sizeof(temp_buffer))
-  {
-    len = sizeof(temp_buffer) - 1;
-  }
-  
-  strncpy(temp_buffer, pos, len);
-  temp_buffer[len] = '\0';
-
-  // Convertir a float
-  *result = atof(temp_buffer);
-  
-    // Debug: mostrar lo que se parseó (printf %f no soportado en tiny printf, imprimimos la cadena)
-    APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISFloat('%s') -> '%s'\r\n", marker, temp_buffer);
-  
-  return true;
-}
-
-/**
-  * @brief  Parse OBIS uint32 value from buffer
-  * @param  buffer pointer to the OBIS buffer
-  * @param  marker OBIS marker string (e.g., "C.1.0(")
-  * @param  result pointer to store the parsed uint32 value
-  * @retval true if parsing successful, false otherwise
-  */
-static bool ParseOBISUint32(char *buffer, const char *marker, uint32_t *result)
-{
-  char *pos = strstr(buffer, marker);
-  if (pos == NULL)
-  {
-  }
-
-  // Avanzar después del marcador
-  pos += strlen(marker);
-
-  // Buscar el final del valor numérico (* o ))
-  char *end_pos = pos;
-  while (*end_pos != '\0' && *end_pos != '*' && *end_pos != ')')
-  {
-    // Validar que sea un carácter numérico
-    if (*end_pos >= '0' && *end_pos <= '9')
-    {
-      end_pos++;
-    }
-    else
-    {
-      break;
-    }
-  }
-
-  // Si no encontramos ningún carácter válido, fallar
-  if (end_pos == pos)
-  {
-    return false;
-  }
-
-  // Extraer el substring numérico
-  char temp_buffer[32];
-  uint32_t len = (uint32_t)(end_pos - pos);
-  if (len >= sizeof(temp_buffer))
-  {
-    len = sizeof(temp_buffer) - 1;
-  }
-  
-  strncpy(temp_buffer, pos, len);
-  temp_buffer[len] = '\0';
-
-  // Convertir a uint32_t
-  *result = atol(temp_buffer);
-  
-  // Debug: mostrar lo que se parseó
-    APP_LOG(TS_ON, VLEVEL_M, "DEBUG: ParseOBISUint32('%s') -> '%s' = %u\r\n", marker, temp_buffer, (unsigned int)*result);
-  
-  return true;
-}
+/* OBIS parser implementation moved to LoRaWAN/App/obis_helpers.c */
 
 /* USER CODE END PrFD_OBIS_Parser */
 

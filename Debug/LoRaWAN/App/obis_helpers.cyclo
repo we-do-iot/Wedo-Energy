@@ -1,0 +1,2 @@
+../LoRaWAN/App/obis_helpers.c:21:6:ParseOBISFloat	12
+../LoRaWAN/App/obis_helpers.c:72:6:ParseOBISUint32	9

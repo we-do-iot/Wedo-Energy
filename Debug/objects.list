@@ -46,6 +46,7 @@
 "./LoRaWAN/App/app_lorawan.o"
 "./LoRaWAN/App/lora_app.o"
 "./LoRaWAN/App/lora_info.o"
+"./LoRaWAN/App/obis_helpers.o"
 "./LoRaWAN/Target/radio_board_if.o"
 "./Middlewares/Third_Party/LoRaWAN/Crypto/cmac.o"
 "./Middlewares/Third_Party/LoRaWAN/Crypto/lorawan_aes.o"

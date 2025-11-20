@@ -8,19 +8,22 @@ C_SRCS += \
 ../LoRaWAN/App/CayenneLpp.c \
 ../LoRaWAN/App/app_lorawan.c \
 ../LoRaWAN/App/lora_app.c \
-../LoRaWAN/App/lora_info.c 
+../LoRaWAN/App/lora_info.c \
+../LoRaWAN/App/obis_helpers.c 
 
 OBJS += \
 ./LoRaWAN/App/CayenneLpp.o \
 ./LoRaWAN/App/app_lorawan.o \
 ./LoRaWAN/App/lora_app.o \
-./LoRaWAN/App/lora_info.o 
+./LoRaWAN/App/lora_info.o \
+./LoRaWAN/App/obis_helpers.o 
 
 C_DEPS += \
 ./LoRaWAN/App/CayenneLpp.d \
 ./LoRaWAN/App/app_lorawan.d \
 ./LoRaWAN/App/lora_app.d \
-./LoRaWAN/App/lora_info.d 
+./LoRaWAN/App/lora_info.d \
+./LoRaWAN/App/obis_helpers.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -30,7 +33,7 @@ LoRaWAN/App/%.o LoRaWAN/App/%.su LoRaWAN/App/%.cyclo: ../LoRaWAN/App/%.c LoRaWAN
 clean: clean-LoRaWAN-2f-App
 
 clean-LoRaWAN-2f-App:
-	-$(RM) ./LoRaWAN/App/CayenneLpp.cyclo ./LoRaWAN/App/CayenneLpp.d ./LoRaWAN/App/CayenneLpp.o ./LoRaWAN/App/CayenneLpp.su ./LoRaWAN/App/app_lorawan.cyclo ./LoRaWAN/App/app_lorawan.d ./LoRaWAN/App/app_lorawan.o ./LoRaWAN/App/app_lorawan.su ./LoRaWAN/App/lora_app.cyclo ./LoRaWAN/App/lora_app.d ./LoRaWAN/App/lora_app.o ./LoRaWAN/App/lora_app.su ./LoRaWAN/App/lora_info.cyclo ./LoRaWAN/App/lora_info.d ./LoRaWAN/App/lora_info.o ./LoRaWAN/App/lora_info.su
+	-$(RM) ./LoRaWAN/App/CayenneLpp.cyclo ./LoRaWAN/App/CayenneLpp.d ./LoRaWAN/App/CayenneLpp.o ./LoRaWAN/App/CayenneLpp.su ./LoRaWAN/App/app_lorawan.cyclo ./LoRaWAN/App/app_lorawan.d ./LoRaWAN/App/app_lorawan.o ./LoRaWAN/App/app_lorawan.su ./LoRaWAN/App/lora_app.cyclo ./LoRaWAN/App/lora_app.d ./LoRaWAN/App/lora_app.o ./LoRaWAN/App/lora_app.su ./LoRaWAN/App/lora_info.cyclo ./LoRaWAN/App/lora_info.d ./LoRaWAN/App/lora_info.o ./LoRaWAN/App/lora_info.su ./LoRaWAN/App/obis_helpers.cyclo ./LoRaWAN/App/obis_helpers.d ./LoRaWAN/App/obis_helpers.o ./LoRaWAN/App/obis_helpers.su
 
 .PHONY: clean-LoRaWAN-2f-App
 

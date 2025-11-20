@@ -2007,46 +2007,48 @@ uint16_t SYS_GetBatteryLevel(void)
  80014c6:	b08c      	sub	sp, #48	@ 0x30
  80014c8:	af06      	add	r7, sp, #24
   /* USER CODE BEGIN SYS_GetBatteryLevel_1 */
+
+  uint16_t batteryLevelmV = 0;
  80014ca:	2300      	movs	r3, #0
  80014cc:	81fb      	strh	r3, [r7, #14]
-
+  uint32_t measVref = 0;
  80014ce:	2300      	movs	r3, #0
  80014d0:	60bb      	str	r3, [r7, #8]
-  uint16_t batteryLevelmV = 0;
+  uint32_t vdd_mV = 0;
  80014d2:	2300      	movs	r3, #0
  80014d4:	617b      	str	r3, [r7, #20]
-  uint32_t measVref = 0;
+  uint32_t raw_pin = 0;
  80014d6:	2300      	movs	r3, #0
  80014d8:	607b      	str	r3, [r7, #4]
-  uint32_t vdd_mV = 0;
+  uint32_t pin_mV = 0;
  80014da:	2300      	movs	r3, #0
  80014dc:	613b      	str	r3, [r7, #16]
-  uint32_t raw_pin = 0;
-  uint32_t pin_mV = 0;
 
+  /* Measure internal VREFINT to compute Vdd (in mV) */
+  measVref = ADC_ReadChannels(ADC_CHANNEL_VREFINT);
  80014de:	482a      	ldr	r0, [pc, #168]	@ (8001588 <SYS_GetBatteryLevel+0xc4>)
  80014e0:	f000 f860 	bl	80015a4 <ADC_ReadChannels>
  80014e4:	60b8      	str	r0, [r7, #8]
-  /* Measure internal VREFINT to compute Vdd (in mV) */
-  measVref = ADC_ReadChannels(ADC_CHANNEL_VREFINT);
+
+  if (measVref == 0)
  80014e6:	68bb      	ldr	r3, [r7, #8]
  80014e8:	2b00      	cmp	r3, #0
  80014ea:	d101      	bne.n	80014f0 <SYS_GetBatteryLevel+0x2c>
-
-  if (measVref == 0)
- 80014ec:	2300      	movs	r3, #0
- 80014ee:	e047      	b.n	8001580 <SYS_GetBatteryLevel+0xbc>
   {
     return 0; /* no measurement available */
+ 80014ec:	2300      	movs	r3, #0
+ 80014ee:	e047      	b.n	8001580 <SYS_GetBatteryLevel+0xbc>
   }
+
+  if ((uint32_t)*VREFINT_CAL_ADDR != (uint32_t)0xFFFFU)
  80014f0:	4b26      	ldr	r3, [pc, #152]	@ (800158c <SYS_GetBatteryLevel+0xc8>)
  80014f2:	881b      	ldrh	r3, [r3, #0]
  80014f4:	f64f 72ff 	movw	r2, #65535	@ 0xffff
  80014f8:	4293      	cmp	r3, r2
  80014fa:	d00b      	beq.n	8001514 <SYS_GetBatteryLevel+0x50>
-
-  if ((uint32_t)*VREFINT_CAL_ADDR != (uint32_t)0xFFFFU)
   {
+    /* Device with Reference voltage calibrated in production: use device optimized parameters */
+    vdd_mV = __LL_ADC_CALC_VREFANALOG_VOLTAGE(measVref, ADC_RESOLUTION_12B);
  80014fc:	4b23      	ldr	r3, [pc, #140]	@ (800158c <SYS_GetBatteryLevel+0xc8>)
  80014fe:	881b      	ldrh	r3, [r3, #0]
  8001500:	461a      	mov	r2, r3
@@ -2056,37 +2058,37 @@ uint16_t SYS_GetBatteryLevel(void)
  800150c:	fbb2 f3f3 	udiv	r3, r2, r3
  8001510:	617b      	str	r3, [r7, #20]
  8001512:	e004      	b.n	800151e <SYS_GetBatteryLevel+0x5a>
-    /* Device with Reference voltage calibrated in production: use device optimized parameters */
-    vdd_mV = __LL_ADC_CALC_VREFANALOG_VOLTAGE(measVref, ADC_RESOLUTION_12B);
   }
   else
   {
+    /* Device with Reference voltage not calibrated in production: use generic parameters */
+    vdd_mV = (VREFINT_CAL_VREF * 1510) / measVref;
  8001514:	4a1e      	ldr	r2, [pc, #120]	@ (8001590 <SYS_GetBatteryLevel+0xcc>)
  8001516:	68bb      	ldr	r3, [r7, #8]
  8001518:	fbb2 f3f3 	udiv	r3, r2, r3
  800151c:	617b      	str	r3, [r7, #20]
-    /* Device with Reference voltage not calibrated in production: use generic parameters */
-    vdd_mV = (VREFINT_CAL_VREF * 1510) / measVref;
   }
 
+  /* Read the external battery sense pin on ADC_IN3 (PB4) */
+  raw_pin = ADC_ReadChannels(ADC_CHANNEL_3);
  800151e:	481d      	ldr	r0, [pc, #116]	@ (8001594 <SYS_GetBatteryLevel+0xd0>)
  8001520:	f000 f840 	bl	80015a4 <ADC_ReadChannels>
  8001524:	6078      	str	r0, [r7, #4]
-  /* Read the external battery sense pin on ADC_IN3 (PB4) */
-  raw_pin = ADC_ReadChannels(ADC_CHANNEL_3);
+
+  if (raw_pin == 0)
  8001526:	687b      	ldr	r3, [r7, #4]
  8001528:	2b00      	cmp	r3, #0
  800152a:	d102      	bne.n	8001532 <SYS_GetBatteryLevel+0x6e>
-
-  if (raw_pin == 0)
+  {
+    pin_mV = 0;
  800152c:	2300      	movs	r3, #0
  800152e:	613b      	str	r3, [r7, #16]
  8001530:	e00b      	b.n	800154a <SYS_GetBatteryLevel+0x86>
-  {
-    pin_mV = 0;
   }
   else
   {
+    /* Convert ADC counts to mV using measured Vdd. ADC resolution is 12-bit (0..4095) */
+    pin_mV = (raw_pin * vdd_mV) / 4095U;
  8001532:	687b      	ldr	r3, [r7, #4]
  8001534:	697a      	ldr	r2, [r7, #20]
  8001536:	fb03 f202 	mul.w	r2, r3, r2
@@ -2097,12 +2099,12 @@ uint16_t SYS_GetBatteryLevel(void)
  8001544:	4413      	add	r3, r2
  8001546:	0adb      	lsrs	r3, r3, #11
  8001548:	613b      	str	r3, [r7, #16]
-    /* Convert ADC counts to mV using measured Vdd. ADC resolution is 12-bit (0..4095) */
-    pin_mV = (raw_pin * vdd_mV) / 4095U;
   }
 
   /* The hardware uses a resistor divider so that the ADC sees ~0.28 * Vbattery.
      To reconstruct the real battery voltage (mV) we multiply by the inverse (4.03 ~= 403/100).
+     Use integer math to avoid floats. */
+  batteryLevelmV = (uint16_t)((pin_mV * 403U) / 100U);
  800154a:	693b      	ldr	r3, [r7, #16]
  800154c:	f240 1293 	movw	r2, #403	@ 0x193
  8001550:	fb02 f303 	mul.w	r3, r2, r3
@@ -2110,10 +2112,10 @@ uint16_t SYS_GetBatteryLevel(void)
  8001556:	fba2 2303 	umull	r2, r3, r2, r3
  800155a:	095b      	lsrs	r3, r3, #5
  800155c:	81fb      	strh	r3, [r7, #14]
-     Use integer math to avoid floats. */
-  batteryLevelmV = (uint16_t)((pin_mV * 403U) / 100U);
 
   /* Debug: print ADC internals to help diagnose first-uplink anomalies */
+  /* Note: use %u and cast to unsigned int to avoid unsupported long specifiers */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: SYS_GetBatteryLevel: measVref=%u vdd_mV=%u raw_pin=%u pin_mV=%u batt_mV=%u\r\n",
  800155e:	89fb      	ldrh	r3, [r7, #14]
  8001560:	9304      	str	r3, [sp, #16]
  8001562:	693b      	ldr	r3, [r7, #16]
@@ -2129,11 +2131,13 @@ uint16_t SYS_GetBatteryLevel(void)
  8001576:	2100      	movs	r1, #0
  8001578:	2002      	movs	r0, #2
  800157a:	f01f f9a1 	bl	80208c0 <UTIL_ADV_TRACE_COND_FSend>
-  /* Note: use %u and cast to unsigned int to avoid unsupported long specifiers */
-  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: SYS_GetBatteryLevel: measVref=%u vdd_mV=%u raw_pin=%u pin_mV=%u batt_mV=%u\r\n",
     (unsigned int)measVref, (unsigned int)vdd_mV, (unsigned int)raw_pin, (unsigned int)pin_mV, (unsigned int)batteryLevelmV);
+
+  return batteryLevelmV;
  800157e:	89fb      	ldrh	r3, [r7, #14]
 
+  /* USER CODE END SYS_GetBatteryLevel_1 */
+}
  8001580:	4618      	mov	r0, r3
  8001582:	3718      	adds	r7, #24
  8001584:	46bd      	mov	sp, r7
@@ -2147,55 +2151,55 @@ uint16_t SYS_GetBatteryLevel(void)
  80015a0:	08023f90 	.word	0x08023f90
 
 080015a4 <ADC_ReadChannels>:
-  /* USER CODE END SYS_GetBatteryLevel_1 */
-}
-
-/* Private Functions Definition -----------------------------------------------*/
 /* USER CODE BEGIN PrFD */
 
- 80015a4:	b580      	push	{r7, lr}
- 80015a6:	b086      	sub	sp, #24
- 80015a8:	af00      	add	r7, sp, #0
- 80015aa:	6078      	str	r0, [r7, #4]
 /* USER CODE END PrFD */
 
 static uint32_t ADC_ReadChannels(uint32_t channel)
 {
+ 80015a4:	b580      	push	{r7, lr}
+ 80015a6:	b086      	sub	sp, #24
+ 80015a8:	af00      	add	r7, sp, #0
+ 80015aa:	6078      	str	r0, [r7, #4]
+  /* USER CODE BEGIN ADC_ReadChannels_1 */
+
+  /* USER CODE END ADC_ReadChannels_1 */
+  uint32_t ADCxConvertedValues = 0;
  80015ac:	2300      	movs	r3, #0
  80015ae:	617b      	str	r3, [r7, #20]
-  /* USER CODE BEGIN ADC_ReadChannels_1 */
+  ADC_ChannelConfTypeDef sConfig = {0};
  80015b0:	f107 0308 	add.w	r3, r7, #8
  80015b4:	2200      	movs	r2, #0
  80015b6:	601a      	str	r2, [r3, #0]
  80015b8:	605a      	str	r2, [r3, #4]
  80015ba:	609a      	str	r2, [r3, #8]
 
-  /* USER CODE END ADC_ReadChannels_1 */
+  MX_ADC_Init();
  80015bc:	f7ff fee0 	bl	8001380 <MX_ADC_Init>
-  uint32_t ADCxConvertedValues = 0;
-  ADC_ChannelConfTypeDef sConfig = {0};
 
+  /* Start Calibration */
+  if (HAL_ADCEx_Calibration_Start(&hadc) != HAL_OK)
  80015c0:	481a      	ldr	r0, [pc, #104]	@ (800162c <ADC_ReadChannels+0x88>)
  80015c2:	f003 f91c 	bl	80047fe <HAL_ADCEx_Calibration_Start>
  80015c6:	4603      	mov	r3, r0
  80015c8:	2b00      	cmp	r3, #0
  80015ca:	d001      	beq.n	80015d0 <ADC_ReadChannels+0x2c>
-  MX_ADC_Init();
-
- 80015cc:	f000 fcea 	bl	8001fa4 <Error_Handler>
-  /* Start Calibration */
-  if (HAL_ADCEx_Calibration_Start(&hadc) != HAL_OK)
   {
     Error_Handler();
+ 80015cc:	f000 fcea 	bl	8001fa4 <Error_Handler>
+  }
+
+  /* Configure Regular Channel */
+  sConfig.Channel = channel;
  80015d0:	687b      	ldr	r3, [r7, #4]
  80015d2:	60bb      	str	r3, [r7, #8]
-  }
+  sConfig.Rank = ADC_REGULAR_RANK_1;
  80015d4:	2300      	movs	r3, #0
  80015d6:	60fb      	str	r3, [r7, #12]
-
+  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
  80015d8:	2300      	movs	r3, #0
  80015da:	613b      	str	r3, [r7, #16]
-  /* Configure Regular Channel */
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
  80015dc:	f107 0308 	add.w	r3, r7, #8
  80015e0:	4619      	mov	r1, r3
  80015e2:	4812      	ldr	r0, [pc, #72]	@ (800162c <ADC_ReadChannels+0x88>)
@@ -2203,48 +2207,48 @@ static uint32_t ADC_ReadChannels(uint32_t channel)
  80015e8:	4603      	mov	r3, r0
  80015ea:	2b00      	cmp	r3, #0
  80015ec:	d001      	beq.n	80015f2 <ADC_ReadChannels+0x4e>
-  sConfig.Channel = channel;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
- 80015ee:	f000 fcd9 	bl	8001fa4 <Error_Handler>
-  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
-  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
   {
+    Error_Handler();
+ 80015ee:	f000 fcd9 	bl	8001fa4 <Error_Handler>
+  }
+
+  if (HAL_ADC_Start(&hadc) != HAL_OK)
  80015f2:	480e      	ldr	r0, [pc, #56]	@ (800162c <ADC_ReadChannels+0x88>)
  80015f4:	f002 fd04 	bl	8004000 <HAL_ADC_Start>
  80015f8:	4603      	mov	r3, r0
  80015fa:	2b00      	cmp	r3, #0
  80015fc:	d001      	beq.n	8001602 <ADC_ReadChannels+0x5e>
-    Error_Handler();
-  }
-
- 80015fe:	f000 fcd1 	bl	8001fa4 <Error_Handler>
-  if (HAL_ADC_Start(&hadc) != HAL_OK)
   {
     /* Start Error */
+    Error_Handler();
+ 80015fe:	f000 fcd1 	bl	8001fa4 <Error_Handler>
+  }
+  /** Wait for end of conversion */
+  HAL_ADC_PollForConversion(&hadc, HAL_MAX_DELAY);
  8001602:	f04f 31ff 	mov.w	r1, #4294967295
  8001606:	4809      	ldr	r0, [pc, #36]	@ (800162c <ADC_ReadChannels+0x88>)
  8001608:	f002 fd72 	bl	80040f0 <HAL_ADC_PollForConversion>
-    Error_Handler();
-  }
+
   /** Wait for end of conversion */
+  HAL_ADC_Stop(&hadc);   /* it calls also ADC_Disable() */
  800160c:	4807      	ldr	r0, [pc, #28]	@ (800162c <ADC_ReadChannels+0x88>)
  800160e:	f002 fd3d 	bl	800408c <HAL_ADC_Stop>
-  HAL_ADC_PollForConversion(&hadc, HAL_MAX_DELAY);
 
+  ADCxConvertedValues = HAL_ADC_GetValue(&hadc);
  8001612:	4806      	ldr	r0, [pc, #24]	@ (800162c <ADC_ReadChannels+0x88>)
  8001614:	f002 fe03 	bl	800421e <HAL_ADC_GetValue>
  8001618:	6178      	str	r0, [r7, #20]
-  /** Wait for end of conversion */
-  HAL_ADC_Stop(&hadc);   /* it calls also ADC_Disable() */
+
+  HAL_ADC_DeInit(&hadc);
  800161a:	4804      	ldr	r0, [pc, #16]	@ (800162c <ADC_ReadChannels+0x88>)
  800161c:	f002 fc64 	bl	8003ee8 <HAL_ADC_DeInit>
 
-  ADCxConvertedValues = HAL_ADC_GetValue(&hadc);
- 8001620:	697b      	ldr	r3, [r7, #20]
-
-  HAL_ADC_DeInit(&hadc);
-
   return ADCxConvertedValues;
+ 8001620:	697b      	ldr	r3, [r7, #20]
+  /* USER CODE BEGIN ADC_ReadChannels_2 */
+
+  /* USER CODE END ADC_ReadChannels_2 */
+}
  8001622:	4618      	mov	r0, r3
  8001624:	3718      	adds	r7, #24
  8001626:	46bd      	mov	sp, r7
@@ -5013,11 +5017,12 @@ uint8_t GetBatteryLevel(void)
     return 0xFF; /* LoRaMAC expects 0xFF for no measurement in many implementations */
  800241c:	23ff      	movs	r3, #255	@ 0xff
  800241e:	e0ae      	b.n	800257e <GetBatteryLevel+0x182>
-  }
 
   /* USER CODE BEGIN GetBatteryLevel_2 */
 
   /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
+  {
+    const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
  8002420:	4b59      	ldr	r3, [pc, #356]	@ (8002588 <GetBatteryLevel+0x18c>)
  8002422:	f107 040c 	add.w	r4, r7, #12
  8002426:	461d      	mov	r5, r3
@@ -5025,29 +5030,29 @@ uint8_t GetBatteryLevel(void)
  800242a:	c40f      	stmia	r4!, {r0, r1, r2, r3}
  800242c:	682b      	ldr	r3, [r5, #0]
  800242e:	6023      	str	r3, [r4, #0]
-  {
+    const uint8_t  pc[]    = {   0,    5,   20,   50,   65,   75,   85,   93,   98,  100};
  8002430:	4a56      	ldr	r2, [pc, #344]	@ (800258c <GetBatteryLevel+0x190>)
  8002432:	463b      	mov	r3, r7
  8002434:	ca07      	ldmia	r2, {r0, r1, r2}
  8002436:	c303      	stmia	r3!, {r0, r1}
  8002438:	801a      	strh	r2, [r3, #0]
-    const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
+    const int points = sizeof(volts) / sizeof(volts[0]);
  800243a:	230a      	movs	r3, #10
  800243c:	62fb      	str	r3, [r7, #44]	@ 0x2c
-    const uint8_t  pc[]    = {   0,    5,   20,   50,   65,   75,   85,   93,   98,  100};
-    const int points = sizeof(volts) / sizeof(volts[0]);
     int i;
+
+    if (batteryLevelmV <= volts[0])
  800243e:	89bb      	ldrh	r3, [r7, #12]
  8002440:	8e7a      	ldrh	r2, [r7, #50]	@ 0x32
  8002442:	429a      	cmp	r2, r3
  8002444:	d803      	bhi.n	800244e <GetBatteryLevel+0x52>
-
-    if (batteryLevelmV <= volts[0])
+    {
+      pct = pc[0];
  8002446:	783b      	ldrb	r3, [r7, #0]
  8002448:	f887 303e 	strb.w	r3, [r7, #62]	@ 0x3e
  800244c:	e066      	b.n	800251c <GetBatteryLevel+0x120>
-    {
-      pct = pc[0];
+    }
+    else if (batteryLevelmV >= volts[points - 1])
  800244e:	6afb      	ldr	r3, [r7, #44]	@ 0x2c
  8002450:	3b01      	subs	r3, #1
  8002452:	005b      	lsls	r3, r3, #1
@@ -5057,8 +5062,8 @@ uint8_t GetBatteryLevel(void)
  800245c:	8e7a      	ldrh	r2, [r7, #50]	@ 0x32
  800245e:	429a      	cmp	r2, r3
  8002460:	d308      	bcc.n	8002474 <GetBatteryLevel+0x78>
-    }
-    else if (batteryLevelmV >= volts[points - 1])
+    {
+      pct = pc[points - 1];
  8002462:	6afb      	ldr	r3, [r7, #44]	@ 0x2c
  8002464:	3b01      	subs	r3, #1
  8002466:	3340      	adds	r3, #64	@ 0x40
@@ -5066,15 +5071,15 @@ uint8_t GetBatteryLevel(void)
  800246a:	f813 3c40 	ldrb.w	r3, [r3, #-64]
  800246e:	f887 303e 	strb.w	r3, [r7, #62]	@ 0x3e
  8002472:	e053      	b.n	800251c <GetBatteryLevel+0x120>
-    {
-      pct = pc[points - 1];
     }
     else
+    {
+      for (i = 0; i < points - 1; i++)
  8002474:	2300      	movs	r3, #0
  8002476:	63bb      	str	r3, [r7, #56]	@ 0x38
  8002478:	e04b      	b.n	8002512 <GetBatteryLevel+0x116>
-    {
-      for (i = 0; i < points - 1; i++)
+      {
+        if ((batteryLevelmV >= volts[i]) && (batteryLevelmV < volts[i + 1]))
  800247a:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  800247c:	005b      	lsls	r3, r3, #1
  800247e:	3340      	adds	r3, #64	@ 0x40
@@ -5092,8 +5097,8 @@ uint8_t GetBatteryLevel(void)
  800249a:	8e7a      	ldrh	r2, [r7, #50]	@ 0x32
  800249c:	429a      	cmp	r2, r3
  800249e:	d235      	bcs.n	800250c <GetBatteryLevel+0x110>
-      {
-        if ((batteryLevelmV >= volts[i]) && (batteryLevelmV < volts[i + 1]))
+        {
+          uint32_t dv = volts[i + 1] - volts[i];
  80024a0:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  80024a2:	3301      	adds	r3, #1
  80024a4:	005b      	lsls	r3, r3, #1
@@ -5108,7 +5113,7 @@ uint8_t GetBatteryLevel(void)
  80024b8:	f833 3c34 	ldrh.w	r3, [r3, #-52]
  80024bc:	1ad3      	subs	r3, r2, r3
  80024be:	62bb      	str	r3, [r7, #40]	@ 0x28
-        {
+          uint32_t dp = pc[i + 1] - pc[i];
  80024c0:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  80024c2:	3301      	adds	r3, #1
  80024c4:	3340      	adds	r3, #64	@ 0x40
@@ -5121,7 +5126,7 @@ uint8_t GetBatteryLevel(void)
  80024d4:	781b      	ldrb	r3, [r3, #0]
  80024d6:	1acb      	subs	r3, r1, r3
  80024d8:	627b      	str	r3, [r7, #36]	@ 0x24
-          uint32_t dv = volts[i + 1] - volts[i];
+          uint32_t offset = batteryLevelmV - volts[i];
  80024da:	8e7a      	ldrh	r2, [r7, #50]	@ 0x32
  80024dc:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  80024de:	005b      	lsls	r3, r3, #1
@@ -5130,7 +5135,7 @@ uint8_t GetBatteryLevel(void)
  80024e4:	f833 3c34 	ldrh.w	r3, [r3, #-52]
  80024e8:	1ad3      	subs	r3, r2, r3
  80024ea:	623b      	str	r3, [r7, #32]
-          uint32_t dp = pc[i + 1] - pc[i];
+          pct = (uint8_t)(pc[i] + ((offset * dp) / dv));
  80024ec:	463a      	mov	r2, r7
  80024ee:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  80024f0:	4413      	add	r3, r2
@@ -5143,9 +5148,9 @@ uint8_t GetBatteryLevel(void)
  8002502:	b2db      	uxtb	r3, r3
  8002504:	4413      	add	r3, r2
  8002506:	f887 303e 	strb.w	r3, [r7, #62]	@ 0x3e
-          uint32_t offset = batteryLevelmV - volts[i];
+          break;
  800250a:	e007      	b.n	800251c <GetBatteryLevel+0x120>
-    else
+      for (i = 0; i < points - 1; i++)
  800250c:	6bbb      	ldr	r3, [r7, #56]	@ 0x38
  800250e:	3301      	adds	r3, #1
  8002510:	63bb      	str	r3, [r7, #56]	@ 0x38
@@ -5154,24 +5159,24 @@ uint8_t GetBatteryLevel(void)
  8002516:	6bba      	ldr	r2, [r7, #56]	@ 0x38
  8002518:	429a      	cmp	r2, r3
  800251a:	dbae      	blt.n	800247a <GetBatteryLevel+0x7e>
-          break;
-        }
       }
     }
   }
 
+  /* Convert percentage (0..100) into LoRa battery scale (1..254) */
+  if (pct == 0)
  800251c:	f897 303e 	ldrb.w	r3, [r7, #62]	@ 0x3e
  8002520:	2b00      	cmp	r3, #0
  8002522:	d103      	bne.n	800252c <GetBatteryLevel+0x130>
-  /* Convert percentage (0..100) into LoRa battery scale (1..254) */
-  if (pct == 0)
+  {
+    batteryLevel = 1; /* very low */
  8002524:	2301      	movs	r3, #1
  8002526:	f887 303f 	strb.w	r3, [r7, #63]	@ 0x3f
  800252a:	e018      	b.n	800255e <GetBatteryLevel+0x162>
-  {
-    batteryLevel = 1; /* very low */
   }
   else
+  {
+    uint32_t level = ((uint32_t)pct * (uint32_t)LORAWAN_MAX_BAT) / 100U;
  800252c:	f897 203e 	ldrb.w	r2, [r7, #62]	@ 0x3e
  8002530:	4613      	mov	r3, r2
  8002532:	01db      	lsls	r3, r3, #7
@@ -5182,31 +5187,31 @@ uint8_t GetBatteryLevel(void)
  800253c:	fba3 2302 	umull	r2, r3, r3, r2
  8002540:	095b      	lsrs	r3, r3, #5
  8002542:	637b      	str	r3, [r7, #52]	@ 0x34
-  {
+    if (level == 0)
  8002544:	6b7b      	ldr	r3, [r7, #52]	@ 0x34
  8002546:	2b00      	cmp	r3, #0
  8002548:	d101      	bne.n	800254e <GetBatteryLevel+0x152>
-    uint32_t level = ((uint32_t)pct * (uint32_t)LORAWAN_MAX_BAT) / 100U;
-    if (level == 0)
- 800254a:	2301      	movs	r3, #1
- 800254c:	637b      	str	r3, [r7, #52]	@ 0x34
     {
       level = 1;
+ 800254a:	2301      	movs	r3, #1
+ 800254c:	637b      	str	r3, [r7, #52]	@ 0x34
+    }
+    if (level > LORAWAN_MAX_BAT)
  800254e:	6b7b      	ldr	r3, [r7, #52]	@ 0x34
  8002550:	2bfe      	cmp	r3, #254	@ 0xfe
  8002552:	d901      	bls.n	8002558 <GetBatteryLevel+0x15c>
-    }
-    if (level > LORAWAN_MAX_BAT)
- 8002554:	23fe      	movs	r3, #254	@ 0xfe
- 8002556:	637b      	str	r3, [r7, #52]	@ 0x34
     {
       level = LORAWAN_MAX_BAT;
- 8002558:	6b7b      	ldr	r3, [r7, #52]	@ 0x34
- 800255a:	f887 303f 	strb.w	r3, [r7, #63]	@ 0x3f
+ 8002554:	23fe      	movs	r3, #254	@ 0xfe
+ 8002556:	637b      	str	r3, [r7, #52]	@ 0x34
     }
     batteryLevel = (uint8_t)level;
+ 8002558:	6b7b      	ldr	r3, [r7, #52]	@ 0x34
+ 800255a:	f887 303f 	strb.w	r3, [r7, #63]	@ 0x3f
   }
 
+  /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
  800255e:	8e7b      	ldrh	r3, [r7, #50]	@ 0x32
  8002560:	f897 203e 	ldrb.w	r2, [r7, #62]	@ 0x3e
  8002564:	f897 103f 	ldrb.w	r1, [r7, #63]	@ 0x3f
@@ -5218,8 +5223,6 @@ uint8_t GetBatteryLevel(void)
  8002572:	2100      	movs	r1, #0
  8002574:	2002      	movs	r0, #2
  8002576:	f01e f9a3 	bl	80208c0 <UTIL_ADV_TRACE_COND_FSend>
-  /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
-  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
 
   /* USER CODE END GetBatteryLevel_2 */
 

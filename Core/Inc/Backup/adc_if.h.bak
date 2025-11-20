@@ -39,20 +39,24 @@ extern "C" {
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
-/**
-  * @brief Battery level in mV
-  */
-#define BAT_CR2032                  ((uint32_t) 3000)
-/**
-  * @brief Maximum battery level in mV
-  */
-#define VDD_BAT                     BAT_CR2032
-/**
-  * @brief Minimum battery level in mV
-  */
-#define VDD_MIN                     1800
-
 /* USER CODE BEGIN EC */
+
+/**
+  * @brief Typical Li-ion battery nominal values (mV)
+  * We measure the battery through a resistor divider and then reconstruct the
+  * real battery voltage in software. The battery maximum is ~4.2V for Li-ion.
+  */
+#define BAT_LI_ION                  ((uint32_t) 4200)
+
+/**
+  * @brief Maximum battery level in mV (Li-ion)
+  */
+#define VDD_BAT                     BAT_LI_ION
+
+/**
+  * @brief Minimum battery level in mV for reporting (below this is considered empty)
+  */
+#define VDD_MIN                     3000
 
 /* USER CODE END EC */
 

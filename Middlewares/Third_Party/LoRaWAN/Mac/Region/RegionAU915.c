@@ -450,41 +450,6 @@ void RegionAU915InitDefaults( InitDefaultsParams_t* params )
             RegionNvmGroup2->ChannelsDefaultMask[5] = 0x0000;
 #endif /* HYBRID_ENABLED == 1 */
 
-            /*
-             * If LORA_FORCE_SUBBAND is set (1..8) force the default channels mask to
-             * enable only that sub-band. This is useful to explicitly restrict the
-             * device to a single 125kHz sub-band regardless of gateway CFList.
-             * Mapping: subband 1 => channels 0..7, 2 => 8..15, ..., 8 => 56..63
-             */
-#if ( LORA_FORCE_SUBBAND > 0 )
-            {
-                uint8_t sb = (uint8_t) LORA_FORCE_SUBBAND; /* 1..8 expected */
-                if( sb >= 1 && sb <= 8 )
-                {
-                    /* Clear existing 125 kHz masks */
-                    RegionNvmGroup2->ChannelsDefaultMask[0] = 0x0000;
-                    RegionNvmGroup2->ChannelsDefaultMask[1] = 0x0000;
-                    RegionNvmGroup2->ChannelsDefaultMask[2] = 0x0000;
-                    RegionNvmGroup2->ChannelsDefaultMask[3] = 0x0000;
-                    /* Disable 500 kHz channels by default when forcing subband */
-                    RegionNvmGroup2->ChannelsDefaultMask[4] = 0x0000;
-                    RegionNvmGroup2->ChannelsDefaultMask[5] = 0x0000;
-
-                    uint8_t bankIndex = ( sb - 1 ) / 2; /* 0..3 */
-                    if( ( ( sb - 1 ) % 2 ) == 0 )
-                    {
-                        /* lower 8 bits of the 16-bit mask element */
-                        RegionNvmGroup2->ChannelsDefaultMask[bankIndex] = 0x00FF;
-                    }
-                    else
-                    {
-                        /* upper 8 bits of the 16-bit mask element */
-                        RegionNvmGroup2->ChannelsDefaultMask[bankIndex] = 0xFF00;
-                    }
-                }
-            }
-#endif /* LORA_FORCE_SUBBAND */
-
             // Copy channels default mask
             RegionCommonChanMaskCopy( RegionNvmGroup2->ChannelsMask, RegionNvmGroup2->ChannelsDefaultMask, CHANNELS_MASK_SIZE );
 

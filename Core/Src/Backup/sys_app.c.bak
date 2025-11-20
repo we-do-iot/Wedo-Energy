@@ -153,6 +153,7 @@ uint8_t GetBatteryLevel(void)
 {
   uint8_t batteryLevel = 0;
   uint16_t batteryLevelmV;
+  uint8_t pct = 0;
 
   /* USER CODE BEGIN GetBatteryLevel_0 */
 
@@ -160,21 +161,66 @@ uint8_t GetBatteryLevel(void)
 
   batteryLevelmV = (uint16_t) SYS_GetBatteryLevel();
 
-  /* Convert battery level from mV to linear scale: 1 (very low) to 254 (fully charged) */
-  if (batteryLevelmV > VDD_BAT)
+  /* If no measurement available, return no-measure value (use 255 as sentinel) */
+  if (batteryLevelmV == 0)
   {
-    batteryLevel = LORAWAN_MAX_BAT;
-  }
-  else if (batteryLevelmV < VDD_MIN)
-  {
-    batteryLevel = 0;
-  }
-  else
-  {
-    batteryLevel = (((uint32_t)(batteryLevelmV - VDD_MIN) * LORAWAN_MAX_BAT) / (VDD_BAT - VDD_MIN));
+    return 0xFF; /* LoRaMAC expects 0xFF for no measurement in many implementations */
   }
 
   /* USER CODE BEGIN GetBatteryLevel_2 */
+
+  /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
+  {
+    const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
+    const uint8_t  pc[]    = {   0,    5,   20,   50,   65,   75,   85,   93,   98,  100};
+    const int points = sizeof(volts) / sizeof(volts[0]);
+    int i;
+
+    if (batteryLevelmV <= volts[0])
+    {
+      pct = pc[0];
+    }
+    else if (batteryLevelmV >= volts[points - 1])
+    {
+      pct = pc[points - 1];
+    }
+    else
+    {
+      for (i = 0; i < points - 1; i++)
+      {
+        if ((batteryLevelmV >= volts[i]) && (batteryLevelmV < volts[i + 1]))
+        {
+          uint32_t dv = volts[i + 1] - volts[i];
+          uint32_t dp = pc[i + 1] - pc[i];
+          uint32_t offset = batteryLevelmV - volts[i];
+          pct = (uint8_t)(pc[i] + ((offset * dp) / dv));
+          break;
+        }
+      }
+    }
+  }
+
+  /* Convert percentage (0..100) into LoRa battery scale (1..254) */
+  if (pct == 0)
+  {
+    batteryLevel = 1; /* very low */
+  }
+  else
+  {
+    uint32_t level = ((uint32_t)pct * (uint32_t)LORAWAN_MAX_BAT) / 100U;
+    if (level == 0)
+    {
+      level = 1;
+    }
+    if (level > LORAWAN_MAX_BAT)
+    {
+      level = LORAWAN_MAX_BAT;
+    }
+    batteryLevel = (uint8_t)level;
+  }
+
+  /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
 
   /* USER CODE END GetBatteryLevel_2 */
 

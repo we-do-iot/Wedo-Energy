@@ -153,10 +153,9 @@ uint8_t GetBatteryLevel(void)
 {
   uint8_t batteryLevel = 0;
   uint16_t batteryLevelmV;
-  uint8_t pct = 0;
 
   /* USER CODE BEGIN GetBatteryLevel_0 */
-
+  uint8_t pct = 0;
   /* USER CODE END GetBatteryLevel_0 */
 
   batteryLevelmV = (uint16_t) SYS_GetBatteryLevel();

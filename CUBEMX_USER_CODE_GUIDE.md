@@ -44,42 +44,57 @@ Ya tienes la solución correcta en las líneas 48-59:
 ## 2. adc_if.h - Configuración de Batería
 
 ### ❌ Problema
-CubeMX cambia automáticamente:
+CubeMX regenera automáticamente estos defines fuera de USER CODE:
 ```c
-#define BAT_LI_ION    ((uint32_t) 4200)  // Se cambia a BAT_CR2032 3000
-#define VDD_BAT       BAT_LI_ION          // Se cambia a BAT_CR2032
-#define VDD_MIN       3000                // Se cambia a 1800
+#define BAT_CR2032    ((uint32_t) 3000)
+#define VDD_BAT       BAT_CR2032
+#define VDD_MIN       1800
 ```
 
-### ✅ Solución
-Mover estos defines dentro de la sección USER CODE en `adc_if.h`:
+### ✅ Solución Definitiva: Usar #undef para Redefinir
 
-**Ubicación**: Entre líneas 57-59 (`/* USER CODE BEGIN EC */` y `/* USER CODE END EC */`)
+**Ubicación**: Entre líneas 55-74 (`/* USER CODE BEGIN EC */` y `/* USER CODE END EC */`)
 
 ```c
 /* USER CODE BEGIN EC */
 
 /**
+  * IMPORTANTE: CubeMX genera automáticamente defines para batería CR2032 arriba.
+  * Los redefinimos aquí para usar valores de batería Li-ion.
+  * Usamos #undef para evitar warnings de redefinición.
+  */
+
+/* Primero eliminamos las definiciones generadas por CubeMX */
+#undef VDD_BAT
+#undef VDD_MIN
+
+/**
   * @brief Typical Li-ion battery nominal values (mV)
-  * We measure the battery through a resistor divider and then reconstruct the
-  * real battery voltage in software. The battery maximum is ~4.2V for Li-ion.
   */
 #define BAT_LI_ION                  ((uint32_t) 4200)
 
 /**
   * @brief Maximum battery level in mV (Li-ion)
+  * REDEFINIDO: CubeMX genera VDD_BAT = BAT_CR2032, nosotros usamos BAT_LI_ION
   */
 #define VDD_BAT                     BAT_LI_ION
 
 /**
   * @brief Minimum battery level in mV for reporting (below this is considered empty)
+  * REDEFINIDO: CubeMX genera VDD_MIN = 1800, nosotros usamos 3000 para Li-ion
   */
 #define VDD_MIN                     3000
 
 /* USER CODE END EC */
 ```
 
-**Importante**: Después de mover estos defines, ELIMINA las definiciones originales que están fuera de USER CODE (líneas 43-55 actuales).
+**Por qué funciona**: 
+1. CubeMX genera los defines para CR2032 arriba (fuera de USER CODE)
+2. Dentro de USER CODE, usamos `#undef` para eliminar esas definiciones
+3. Luego redefinimos con nuestros valores de Li-ion
+4. El compilador usa las últimas definiciones (las nuestras)
+
+**Importante**: NO intentes eliminar los defines que CubeMX genera arriba, porque los volverá a crear en la próxima regeneración.
 
 ---
 
@@ -155,28 +170,59 @@ Asegúrate de que NO haya código duplicado fuera de las secciones USER CODE. El
 
 ---
 
-## 6. Resumen de Acciones Necesarias
+## 6. ⚠️ IMPORTANTE: NO Puedes Crear Tus Propias Secciones USER CODE
 
-### ✅ Ya Protegido (No requiere acción):
-- [x] `lora_app.c` - Defines con guards `#ifndef`
-- [x] `sys_app.c` - Función `GetBatteryLevel()` personalizada
+### ❌ Esto NO Funciona:
 
-### ⚠️ Requiere Acción:
-- [ ] **`adc_if.h`** - Mover defines de batería a sección USER CODE
+```c
+/* USER CODE BEGIN MiSeccionPersonalizada */
+#define MI_VALOR 123
+/* USER CODE END MiSeccionPersonalizada */
+```
+
+### ¿Por Qué?
+
+1. **STM32CubeMX mantiene un template interno** de cada archivo que genera
+2. **Solo reconoce las secciones USER CODE que él mismo creó** durante la generación inicial
+3. **Cuando regenera**, busca esas secciones específicas por nombre
+4. **Cualquier sección USER CODE que agregues manualmente será IGNORADA y sobrescrita**
+
+### ✅ Soluciones Alternativas:
+
+#### Opción 1: Usar Secciones Existentes
+Coloca tu código en las secciones USER CODE que ya existen en el archivo.
+
+#### Opción 2: Crear Archivos Separados
+Si necesitas mucho código personalizado, créalo en archivos separados que CubeMX no toque:
+
+```
+LoRaWAN/App/
+├── lora_app.c          (generado por CubeMX)
+├── lora_app.h          (generado por CubeMX)
+├── obis_helpers.c      (TU archivo, CubeMX no lo toca)
+└── obis_helpers.h      (TU archivo, CubeMX no lo toca)
+```
+
+#### Opción 3: Usar #undef para Redefinir
+Como vimos en `adc_if.h`, puedes usar `#undef` dentro de USER CODE para redefinir valores generados por CubeMX.
+
+### 📋 Archivos que CubeMX Genera y Mantiene:
+
+CubeMX **SOLO** agrega secciones USER CODE en archivos que él genera:
+- ✅ `main.c`, `main.h`
+- ✅ `stm32xxxx_it.c`, `stm32xxxx_it.h`
+- ✅ Archivos de periféricos (ej: `usart.c`, `gpio.c`)
+- ✅ Archivos de middleware (ej: `lora_app.c`, `sys_app.c`)
+- ❌ Archivos que TÚ creas manualmente (CubeMX no los toca)
 
 ---
 
-## 7. Ejemplo de Migración para adc_if.h
+## 7. Resumen de Acciones Necesarias
 
-### Paso 1: Abrir `Core/Inc/adc_if.h`
-
-### Paso 2: Localizar las líneas 43-55 (defines actuales fuera de USER CODE)
-
-### Paso 3: CORTAR esas líneas
-
-### Paso 4: PEGAR dentro de `/* USER CODE BEGIN EC */` (línea 57)
-
-### Paso 5: Guardar y regenerar con CubeMX para verificar
+### ✅ Ya Protegido (No requiere acción):
+- [x] `lora_app.c` - Defines con guards `#ifndef`
+- [x] `adc_if.h` - Usando `#undef` para redefinir valores de batería
+- [x] `sys_app.c` - Función `GetBatteryLevel()` personalizada
 
 ---
 
@@ -190,9 +236,12 @@ Asegúrate de que NO haya código duplicado fuera de las secciones USER CODE. El
 
 4. **Documentación**: Mantén este archivo actualizado con cualquier otro código que necesites proteger.
 
+5. **NO puedes crear secciones USER CODE personalizadas**: Solo funcionan las que STM32CubeMX coloca automáticamente.
+
 ---
 
 ## 9. Referencias
 
 - [STM32CubeMX User Manual](https://www.st.com/resource/en/user_manual/um1718-stm32cubemx-for-stm32-configuration-and-initialization-c-code-generation-stmicroelectronics.pdf)
 - Sección sobre "USER CODE sections"
+

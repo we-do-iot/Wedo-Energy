@@ -84,8 +84,125 @@ typedef enum TxEventType_e
   /* USER CODE BEGIN TxEventType_t */
 
   /* USER CODE END TxEventType_t */
-
 } TxEventType_t;
+
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/**
+  * LEDs period value of the timer in ms
+  */
+#define LED_PERIOD_TIME 500
+
+/**
+  * Join switch period value of the timer in ms
+  */
+#define JOIN_TIME 2000
+
+/*---------------------------------------------------------------------------*/
+/*                             LoRaWAN NVM configuration                     */
+/*---------------------------------------------------------------------------*/
+/**
+  * @brief LoRaWAN NVM Flash address
+  * @note last 2 sector of a 128kBytes device
+  */
+#define LORAWAN_NVM_BASE_ADDRESS                    ((void *)0x0803F000UL)
+
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private function prototypes -----------------------------------------------*/
+/**
+  * @brief  LoRa End Node send request
+  */
+static void SendTxData(void);
+
+/**
+  * @brief  TX timer callback function
+  * @param  context ptr of timer context
+  */
+static void OnTxTimerEvent(void *context);
+
+/**
+  * @brief  join event callback function
+  * @param  joinParams status of join
+  */
+static void OnJoinRequest(LmHandlerJoinParams_t *joinParams);
+
+/**
+  * @brief callback when LoRaWAN application has sent a frame
+  * @brief  tx event callback function
+  * @param  params status of last Tx
+  */
+static void OnTxData(LmHandlerTxParams_t *params);
+
+/**
+  * @brief callback when LoRaWAN application has received a frame
+  * @param appData data received in the last Rx
+  * @param params status of last Rx
+  */
+static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params);
+
+/**
+  * @brief callback when LoRaWAN Beacon status is updated
+  * @param params status of Last Beacon
+  */
+static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params);
+
+/**
+  * @brief callback when system time has been updated
+  */
+static void OnSysTimeUpdate(void);
+
+/**
+  * @brief callback when LoRaWAN application Class is changed
+  * @param deviceClass new class
+  */
+static void OnClassChange(DeviceClass_t deviceClass);
+
+/**
+  * @brief  LoRa store context in Non Volatile Memory
+  */
+static void StoreContext(void);
+
+/**
+  * @brief  stop current LoRa execution to switch into non default Activation mode
+  */
+static void StopJoin(void);
+
+/**
+  * @brief  Join switch timer callback function
+  * @param  context ptr of Join switch context
+  */
+static void OnStopJoinTimerEvent(void *context);
+
+/**
+  * @brief  Notifies the upper layer that the NVM context has changed
+  * @param  state Indicates if we are storing (true) or restoring (false) the NVM context
+  */
+static void OnNvmDataChange(LmHandlerNvmContextStates_t state);
+
+/**
+  * @brief  Store the NVM Data context to the Flash
+  * @param  nvm ptr on nvm structure
+  * @param  nvm_size number of data bytes which were stored
+  */
+static void OnStoreContextRequest(void *nvm, uint32_t nvm_size);
+
+/**
+  * @brief  Restore the NVM Data context from the Flash
+  * @param  nvm ptr on nvm structure
+  * @param  nvm_size number of data bytes which were restored
+  */
+static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size);
 
 /**
   * Will be called each time a Radio IRQ is handled by the MAC layer
@@ -495,12 +612,6 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
-/* USER CODE BEGIN PrFD_OBIS_Parser */
-
-/* OBIS parser implementation moved to LoRaWAN/App/obis_helpers.c */
-
-/* USER CODE END PrFD_OBIS_Parser */
-
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
@@ -730,6 +841,7 @@ static void SendTxData(void)
   }
   /* USER CODE END SendTxData_1 */
 }
+
 static void OnTxTimerEvent(void *context)
 {
   /* USER CODE BEGIN OnTxTimerEvent_1 */

@@ -39,7 +39,30 @@ extern "C" {
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
+/**
+  * @brief Battery level in mV
+  */
+#define BAT_CR2032                  ((uint32_t) 3000)
+/**
+  * @brief Maximum battery level in mV
+  */
+#define VDD_BAT                     BAT_CR2032
+/**
+  * @brief Minimum battery level in mV
+  */
+#define VDD_MIN                     1800
+
 /* USER CODE BEGIN EC */
+
+/**
+  * IMPORTANTE: CubeMX genera automáticamente defines para batería CR2032 arriba.
+  * Los redefinimos aquí para usar valores de batería Li-ion.
+  * Usamos #undef para evitar warnings de redefinición.
+  */
+
+/* Primero eliminamos las definiciones generadas por CubeMX */
+#undef VDD_BAT
+#undef VDD_MIN
 
 /**
   * @brief Typical Li-ion battery nominal values (mV)
@@ -50,11 +73,13 @@ extern "C" {
 
 /**
   * @brief Maximum battery level in mV (Li-ion)
+  * REDEFINIDO: CubeMX genera VDD_BAT = BAT_CR2032, nosotros usamos BAT_LI_ION
   */
 #define VDD_BAT                     BAT_LI_ION
 
 /**
   * @brief Minimum battery level in mV for reporting (below this is considered empty)
+  * REDEFINIDO: CubeMX genera VDD_MIN = 1800, nosotros usamos 3000 para Li-ion
   */
 #define VDD_MIN                     3000
 

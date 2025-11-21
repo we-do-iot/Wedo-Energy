@@ -109,7 +109,7 @@ int main(void)
   MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
   MX_USART1_UART_Init();
-  // �? CONFIGURAR WAKEUP PARA USART1
+  // �? CONFIGURAR WAKEUP PARA USART1
   UART_WakeUpTypeDef WakeUpSelection;
   WakeUpSelection.WakeUpEvent = UART_WAKEUP_ON_STARTBIT;
   HAL_UARTEx_StopModeWakeUpSourceConfig(&huart1, WakeUpSelection);
@@ -131,24 +131,28 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-	    // Procesar trama recibida
-	    if (uart_rx_complete) {
-	        ProcessUartData();
-	    }
-
-	    // Si se presionó el botón, solicitar lectura del medidor
-	    if (button_pressed) {
-	        button_pressed = 0;
-	        RequestMeterRead();
-	    }
+while (1)
+{
+  // Procesar datos UART del medidor
+  if (uart_rx_complete) {
+    // Copiar datos a buffer permanente si es necesario
+    // (uart_rx_buffer ya tiene los datos)
+    
+    // Activar flag para LoRaWAN
+    meter_data_ready = 1;
+    
+    // Resetear flag de recepción
+    uart_rx_complete = 0;
+    
+    // Reiniciar índice para próxima recepción
+    uart_rx_index = 0;
+  }
+  
     /* USER CODE END WHILE */
     MX_LoRaWAN_Process();
 
     /* USER CODE BEGIN 3 */
-
-  }
+}
   /* USER CODE END 3 */
 }
 

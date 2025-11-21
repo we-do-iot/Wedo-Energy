@@ -188,10 +188,12 @@ uint16_t SYS_GetBatteryLevel(void)
   APP_LOG(TS_ON, VLEVEL_M, "DEBUG: SYS_GetBatteryLevel: measVref=%u vdd_mV=%u raw_pin=%u pin_mV=%u batt_mV=%u\r\n",
     (unsigned int)measVref, (unsigned int)vdd_mV, (unsigned int)raw_pin, (unsigned int)pin_mV, (unsigned int)batteryLevelmV);
 
+
   return batteryLevelmV;
 
   /* USER CODE END SYS_GetBatteryLevel_1 */
 }
+
 
 /* Private Functions Definition -----------------------------------------------*/
 /* USER CODE BEGIN PrFD */

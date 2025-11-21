@@ -2,7 +2,7 @@
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:370:24:LmHandlerDeInit	8	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:385:24:LmHandlerConfigure	80	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:529:6:LmHandlerIsBusy	8	static
-../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:557:6:LmHandlerProcess	16	static
+../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:557:6:LmHandlerProcess	8	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:593:13:LmHandlerGetDutyCycleWaitTime	4	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:598:6:LmHandlerJoin	80	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:678:23:LmHandlerJoinStatus	56	static
@@ -15,7 +15,7 @@
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1010:24:LmHandlerGetActiveRegion	16	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1021:24:LmHandlerSetSystemMaxRxError	56	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1040:13:McpsConfirm	16	static
-../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1058:13:McpsIndication	32	static
+../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1058:13:McpsIndication	40	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1118:13:MlmeConfirm	56	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1228:13:MlmeIndication	16	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1311:24:LmHandlerPackageRegister	24	static
@@ -23,8 +23,6 @@
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1364:13:LmHandlerPackagesNotify	24	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1419:13:LmHandlerPackageIsTxPending	16	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1438:13:LmHandlerPackagesProcess	16	static
-../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1452:13:LmHandlerOnTxFrameCtrlChanged	16	static
-../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1462:13:LmHandlerOnPingSlotPeriodicityChanged	16	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1479:24:LmHandlerGetVersion	16	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1501:24:LmHandlerStop	8	static
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.c:1513:24:LmHandlerHalt	8	static

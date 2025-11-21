@@ -1,6 +1,6 @@
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:101:17:GetDutyCycle	3
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:138:17:SetMaxTimeCredits	5
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:229:17:UpdateTimeCredits	7
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:101:17:GetDutyCycle	5
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:138:17:SetMaxTimeCredits	11
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:265:17:UpdateTimeCredits	3
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:292:16:CountChannels	3
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:306:6:RegionCommonChanVerifyDr	6
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:331:9:RegionCommonValueInRange	3
@@ -8,7 +8,7 @@
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:355:9:RegionCommonCountChannels	3
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:372:6:RegionCommonChanMaskCopy	4
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:383:6:RegionCommonSetBandTxDone	2
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:401:13:RegionCommonUpdateBandTimeOff	8
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:401:13:RegionCommonUpdateBandTimeOff	11
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:517:9:RegionCommonParseLinkAdrReq	2
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:541:9:RegionCommonLinkAdrReqVerifyParams	10
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.c:606:10:RegionCommonComputeSymbolTimeLoRa	1

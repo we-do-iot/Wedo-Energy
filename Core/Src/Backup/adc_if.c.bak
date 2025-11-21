@@ -191,6 +191,36 @@ uint16_t SYS_GetBatteryLevel(void)
   return batteryLevelmV;
 
   /* USER CODE END SYS_GetBatteryLevel_1 */
+  uint16_t batteryLevelmV = 0;
+  uint32_t measuredLevel = 0;
+
+  measuredLevel = ADC_ReadChannels(ADC_CHANNEL_VREFINT);
+
+  if (measuredLevel == 0)
+  {
+    batteryLevelmV = 0;
+  }
+  else
+  {
+    if ((uint32_t)*VREFINT_CAL_ADDR != (uint32_t)0xFFFFU)
+    {
+      /* Device with Reference voltage calibrated in production:
+         use device optimized parameters */
+      batteryLevelmV = __LL_ADC_CALC_VREFANALOG_VOLTAGE(measuredLevel,
+                                                        ADC_RESOLUTION_12B);
+    }
+    else
+    {
+      /* Device with Reference voltage not calibrated in production:
+         use generic parameters */
+      batteryLevelmV = (VREFINT_CAL_VREF * 1510) / measuredLevel;
+    }
+  }
+
+  return batteryLevelmV;
+  /* USER CODE BEGIN SYS_GetBatteryLevel_2 */
+
+  /* USER CODE END SYS_GetBatteryLevel_2 */
 }
 
 /* Private Functions Definition -----------------------------------------------*/

@@ -160,13 +160,8 @@ uint8_t GetBatteryLevel(void)
 
   batteryLevelmV = (uint16_t) SYS_GetBatteryLevel();
 
-  /* If no measurement available, return no-measure value (use 255 as sentinel) */
-  if (batteryLevelmV == 0)
-  {
-    return 0xFF; /* LoRaMAC expects 0xFF for no measurement in many implementations */
-  }
-
   /* USER CODE BEGIN GetBatteryLevel_2 */
+
 
   /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
   {

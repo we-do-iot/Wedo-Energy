@@ -130,7 +130,7 @@ int main(void)
   /* USER CODE END 2 */
 
   /* Infinite loop */
-/* USER CODE BEGIN WHILE */
+  /* USER CODE BEGIN WHILE */
 while (1)
 {
   // Procesar datos UART del medidor
@@ -148,11 +148,12 @@ while (1)
     uart_rx_index = 0;
   }
   
-  /* USER CODE END WHILE */
-  MX_LoRaWAN_Process();
-  /* USER CODE BEGIN 3 */
+    /* USER CODE END WHILE */
+    MX_LoRaWAN_Process();
+
+    /* USER CODE BEGIN 3 */
 }
-/* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**

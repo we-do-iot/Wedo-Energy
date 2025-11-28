@@ -1,0 +1,5 @@
+../LoRaWAN/Target/frag_decoder_if.c:114:9:FRAG_DECODER_IF_Erase	1
+../LoRaWAN/Target/frag_decoder_if.c:132:9:FRAG_DECODER_IF_Write	2
+../LoRaWAN/Target/frag_decoder_if.c:155:9:FRAG_DECODER_IF_Read	1
+../LoRaWAN/Target/frag_decoder_if.c:172:6:FRAG_DECODER_IF_OnProgress	2
+../LoRaWAN/Target/frag_decoder_if.c:191:6:FRAG_DECODER_IF_OnDone	1

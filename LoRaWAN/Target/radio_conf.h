@@ -22,6 +22,8 @@
 #ifndef __RADIO_CONF_H__
 #define __RADIO_CONF_H__
 
+#define DISABLE_PROBE_GPIO 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif

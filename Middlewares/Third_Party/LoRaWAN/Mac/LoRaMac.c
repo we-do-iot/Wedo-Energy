@@ -1646,12 +1646,8 @@ static void ProcessRadioRxDone( void )
 
             // Set the pending status
 			// Fix for Class C Certification test. Re-enabled part of if condition previously removed.
-#if (defined( LORAMAC_VERSION ) && (( LORAMAC_VERSION == 0x01000400 ) || ( LORAMAC_VERSION == 0x01010100 )))
             if( ( ( ( Nvm.MacGroup1.SrvAckRequested == true ) || ( macMsgData.FHDR.FCtrl.Bits.FPending > 0 ) ) && ( Nvm.MacGroup2.DeviceClass == CLASS_A ) ) ||
                 ( MacCtx.McpsIndication.ResponseTimeout > 0 ) ) 
-#else
-            if( ( ( Nvm.MacGroup1.SrvAckRequested == true ) || ( macMsgData.FHDR.FCtrl.Bits.FPending > 0 ) ) && ( Nvm.MacGroup2.DeviceClass == CLASS_A ) )
-#endif /* LORAMAC_VERSION */
             //if( ( ( Nvm.MacGroup1.SrvAckRequested == true ) || ( macMsgData.FHDR.FCtrl.Bits.FPending > 0 ) ) && ( Nvm.MacGroup2.DeviceClass == CLASS_A ) )
             {
                 MacCtx.McpsIndication.IsUplinkTxPending = 1;

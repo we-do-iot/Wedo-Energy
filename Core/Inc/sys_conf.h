@@ -84,7 +84,7 @@ extern "C" {
 #define LOW_POWER_DISABLE                    1
 
 /* USER CODE BEGIN EC */
-
+#define DISABLE_PROBE_GPIO 1
 /* USER CODE END EC */
 
 /* External variables --------------------------------------------------------*/

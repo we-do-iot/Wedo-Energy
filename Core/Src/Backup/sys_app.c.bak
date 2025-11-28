@@ -176,6 +176,7 @@ uint8_t GetBatteryLevel(void)
 
   /* USER CODE BEGIN GetBatteryLevel_2 */
 
+
   /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
   {
     const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};

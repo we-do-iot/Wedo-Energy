@@ -22,4 +22,4 @@
 ../LoRaWAN/App/lora_app.c:1129:13:StoreContext	16	static
 ../LoRaWAN/App/lora_app.c:1151:13:OnNvmDataChange	16	static
 ../LoRaWAN/App/lora_app.c:1169:13:OnStoreContextRequest	16	static
-../LoRaWAN/App/lora_app.c:1184:13:OnRestoreContextRequest	16	static
+../LoRaWAN/App/lora_app.c:1181:13:OnRestoreContextRequest	16	static

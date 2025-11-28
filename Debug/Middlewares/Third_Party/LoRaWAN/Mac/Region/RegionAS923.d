@@ -25,7 +25,10 @@ Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAS923.o: \
  ../Middlewares/Third_Party/LoRaWAN/Mac/secure-element-nvm.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacClassBNvm.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacHeaderTypes.h \
- ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h
+ ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h \
+ ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.h \
+ ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandlerTypes.h \
+ ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h
 ../Middlewares/Third_Party/SubGHz_Phy/radio.h:
 ../Middlewares/Third_Party/SubGHz_Phy/radio_def.h:
 ../Middlewares/Third_Party/SubGHz_Phy/radio_ex.h:
@@ -57,3 +60,6 @@ Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionAS923.o: \
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacClassBNvm.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacHeaderTypes.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h:
+../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandler.h:
+../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandlerTypes.h:
+../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h:

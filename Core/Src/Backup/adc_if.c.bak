@@ -140,7 +140,7 @@ uint16_t SYS_GetBatteryLevel(void)
 {
   /* USER CODE BEGIN SYS_GetBatteryLevel_1 */
 
-  uint16_t batteryLevelmV = 0;
+  uint16_t userbatteryLevelmV = 0;
   uint32_t measVref = 0;
   uint32_t vdd_mV = 0;
   uint32_t raw_pin = 0;
@@ -181,16 +181,46 @@ uint16_t SYS_GetBatteryLevel(void)
   /* The hardware uses a resistor divider so that the ADC sees ~0.28 * Vbattery.
      To reconstruct the real battery voltage (mV) we multiply by the inverse (4.03 ~= 403/100).
      Use integer math to avoid floats. */
-  batteryLevelmV = (uint16_t)((pin_mV * 403U) / 100U);
+  userbatteryLevelmV = (uint16_t)((pin_mV * 403U) / 100U);
 
   /* Debug: print ADC internals to help diagnose first-uplink anomalies */
   /* Note: use %u and cast to unsigned int to avoid unsupported long specifiers */
   APP_LOG(TS_ON, VLEVEL_M, "DEBUG: SYS_GetBatteryLevel: measVref=%u vdd_mV=%u raw_pin=%u pin_mV=%u batt_mV=%u\r\n",
-    (unsigned int)measVref, (unsigned int)vdd_mV, (unsigned int)raw_pin, (unsigned int)pin_mV, (unsigned int)batteryLevelmV);
+    (unsigned int)measVref, (unsigned int)vdd_mV, (unsigned int)raw_pin, (unsigned int)pin_mV, (unsigned int)userbatteryLevelmV);
 
-  return batteryLevelmV;
+  return userbatteryLevelmV;
 
   /* USER CODE END SYS_GetBatteryLevel_1 */
+  uint16_t batteryLevelmV = 0;
+  uint32_t measuredLevel = 0;
+
+  measuredLevel = ADC_ReadChannels(ADC_CHANNEL_VREFINT);
+
+  if (measuredLevel == 0)
+  {
+    batteryLevelmV = 0;
+  }
+  else
+  {
+    if ((uint32_t)*VREFINT_CAL_ADDR != (uint32_t)0xFFFFU)
+    {
+      /* Device with Reference voltage calibrated in production:
+         use device optimized parameters */
+      batteryLevelmV = __LL_ADC_CALC_VREFANALOG_VOLTAGE(measuredLevel,
+                                                        ADC_RESOLUTION_12B);
+    }
+    else
+    {
+      /* Device with Reference voltage not calibrated in production:
+         use generic parameters */
+      batteryLevelmV = (VREFINT_CAL_VREF * 1510) / measuredLevel;
+    }
+  }
+
+  return batteryLevelmV;
+  /* USER CODE BEGIN SYS_GetBatteryLevel_2 */
+
+  /* USER CODE END SYS_GetBatteryLevel_2 */
 }
 
 /* Private Functions Definition -----------------------------------------------*/

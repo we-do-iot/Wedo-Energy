@@ -12,7 +12,8 @@
 ../Utilities/timer/stm32_timer.c:365:6:UTIL_TIMER_IRQ_Handler	48	static,ignoring_inline_asm
 ../Utilities/timer/stm32_timer.c:417:19:UTIL_TIMER_GetCurrentTime	16	static
 ../Utilities/timer/stm32_timer.c:423:19:UTIL_TIMER_GetElapsedTime	24	static
-../Utilities/timer/stm32_timer.c:448:6:TimerExists	24	static
-../Utilities/timer/stm32_timer.c:468:6:TimerSetTimeout	32	static
-../Utilities/timer/stm32_timer.c:489:6:TimerInsertTimer	24	static
-../Utilities/timer/stm32_timer.c:521:6:TimerInsertNewHeadTimer	24	static
+../Utilities/timer/stm32_timer.c:431:22:UTIL_TIMER_GetTimerList	4	static
+../Utilities/timer/stm32_timer.c:453:6:TimerExists	24	static
+../Utilities/timer/stm32_timer.c:473:6:TimerSetTimeout	32	static
+../Utilities/timer/stm32_timer.c:494:6:TimerInsertTimer	24	static
+../Utilities/timer/stm32_timer.c:526:6:TimerInsertNewHeadTimer	24	static

@@ -12,7 +12,8 @@
 ../Utilities/timer/stm32_timer.c:365:6:UTIL_TIMER_IRQ_Handler	11
 ../Utilities/timer/stm32_timer.c:417:19:UTIL_TIMER_GetCurrentTime	1
 ../Utilities/timer/stm32_timer.c:423:19:UTIL_TIMER_GetElapsedTime	1
-../Utilities/timer/stm32_timer.c:448:6:TimerExists	3
-../Utilities/timer/stm32_timer.c:468:6:TimerSetTimeout	2
-../Utilities/timer/stm32_timer.c:489:6:TimerInsertTimer	3
-../Utilities/timer/stm32_timer.c:521:6:TimerInsertNewHeadTimer	2
+../Utilities/timer/stm32_timer.c:431:22:UTIL_TIMER_GetTimerList	1
+../Utilities/timer/stm32_timer.c:453:6:TimerExists	3
+../Utilities/timer/stm32_timer.c:473:6:TimerSetTimeout	2
+../Utilities/timer/stm32_timer.c:494:6:TimerInsertTimer	3
+../Utilities/timer/stm32_timer.c:526:6:TimerInsertNewHeadTimer	2

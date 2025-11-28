@@ -22,9 +22,7 @@ Middlewares/Third_Party/LoRaWAN/Mac/Region/Region.o: \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/Region.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacHeaderTypes.h \
- ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h \
- ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionEU868.h \
- ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionUS915.h
+ ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacInterfaces.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h:
 ../LoRaWAN/Target/timer.h:
@@ -52,5 +50,3 @@ Middlewares/Third_Party/LoRaWAN/Mac/Region/Region.o: \
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacHeaderTypes.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h:
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionEU868.h:
-../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionUS915.h:

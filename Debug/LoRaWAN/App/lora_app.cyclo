@@ -21,5 +21,5 @@
 ../LoRaWAN/App/lora_app.c:1111:13:OnStopJoinTimerEvent	2
 ../LoRaWAN/App/lora_app.c:1129:13:StoreContext	3
 ../LoRaWAN/App/lora_app.c:1151:13:OnNvmDataChange	2
-../LoRaWAN/App/lora_app.c:1169:13:OnStoreContextRequest	2
-../LoRaWAN/App/lora_app.c:1184:13:OnRestoreContextRequest	1
+../LoRaWAN/App/lora_app.c:1169:13:OnStoreContextRequest	1
+../LoRaWAN/App/lora_app.c:1181:13:OnRestoreContextRequest	1

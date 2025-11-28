@@ -1,14 +1,17 @@
 Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionBaseUS.o: \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionBaseUS.c \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h \
- ../LoRaWAN/Target/timer.h ../Utilities/timer/stm32_timer.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/timer.h \
+ ../Utilities/timer/stm32_timer.h \
  ../Drivers/CMSIS/Include/cmsis_compiler.h \
- ../Drivers/CMSIS/Include/cmsis_gcc.h ../Core/Inc/utilities_conf.h \
+ ../Drivers/CMSIS/Include/cmsis_gcc.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h \
  ../Utilities/misc/stm32_mem.h ../Utilities/misc/stm32_tiny_vsnprintf.h \
- ../Core/Inc/utilities_def.h ../LoRaWAN/Target/systime.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/systime.h \
  ../Utilities/misc/stm32_systime.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacVersion.h \
- ../LoRaWAN/Target/lorawan_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/lorawan_conf.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/Region.h \
  ../Middlewares/Third_Party/LoRaWAN/Utilities/utilities.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.h \
@@ -26,18 +29,18 @@ Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionBaseUS.o: \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMac.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacInterfaces.h
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h:
-../LoRaWAN/Target/timer.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/timer.h:
 ../Utilities/timer/stm32_timer.h:
 ../Drivers/CMSIS/Include/cmsis_compiler.h:
 ../Drivers/CMSIS/Include/cmsis_gcc.h:
-../Core/Inc/utilities_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h:
 ../Utilities/misc/stm32_mem.h:
 ../Utilities/misc/stm32_tiny_vsnprintf.h:
-../Core/Inc/utilities_def.h:
-../LoRaWAN/Target/systime.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/systime.h:
 ../Utilities/misc/stm32_systime.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacVersion.h:
-../LoRaWAN/Target/lorawan_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/lorawan_conf.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/Region.h:
 ../Middlewares/Third_Party/LoRaWAN/Utilities/utilities.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionCommon.h:

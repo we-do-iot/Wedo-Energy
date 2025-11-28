@@ -2,9 +2,9 @@ Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.o: \
  ../Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.c \
  ../Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.h \
  ../Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_errno.h \
- ../Core/Inc/stm32wlxx_nucleo_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_nucleo_conf.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h \
- ../Core/Inc/stm32wlxx_hal_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h \
  ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h \
@@ -45,9 +45,9 @@ Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.o: \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_system.h
 ../Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.h:
 ../Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_errno.h:
-../Core/Inc/stm32wlxx_nucleo_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_nucleo_conf.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h:
-../Core/Inc/stm32wlxx_hal_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h:

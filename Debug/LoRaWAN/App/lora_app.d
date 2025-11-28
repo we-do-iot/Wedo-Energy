@@ -1,4 +1,5 @@
-LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
+LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/platform.h \
  ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h \
  ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wle5xx.h \
  ../Drivers/CMSIS/Include/core_cm4.h \
@@ -8,7 +9,7 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
  ../Drivers/CMSIS/Include/mpu_armv7.h \
  ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/system_stm32wlxx.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h \
- ../Core/Inc/stm32wlxx_hal_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h \
@@ -39,19 +40,23 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart_ex.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_system.h \
- ../Core/Inc/main.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/main.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_gpio.h \
  D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.h \
  D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_errno.h \
- ../Core/Inc/stm32wlxx_nucleo_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_nucleo_conf.h \
  D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo.h \
- ../Core/Inc/sys_app.h ../Core/Inc/sys_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_app.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_conf.h \
  ../Utilities/trace/adv_trace/stm32_adv_trace.h \
- ../Core/Inc/utilities_conf.h ../Drivers/CMSIS/Include/cmsis_compiler.h \
- ../Utilities/misc/stm32_mem.h ../Utilities/misc/stm32_tiny_vsnprintf.h \
- ../Core/Inc/utilities_def.h ../LoRaWAN/App/lora_app.h \
- ../Utilities/sequencer/stm32_seq.h ../Utilities/timer/stm32_timer.h \
- ../Core/Inc/utilities_def.h ../LoRaWAN/App/app_version.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h \
+ ../Drivers/CMSIS/Include/cmsis_compiler.h ../Utilities/misc/stm32_mem.h \
+ ../Utilities/misc/stm32_tiny_vsnprintf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h \
+ ../LoRaWAN/App/lora_app.h ../Utilities/sequencer/stm32_seq.h \
+ ../Utilities/timer/stm32_timer.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h \
+ ../LoRaWAN/App/app_version.h \
  ../Middlewares/Third_Party/LoRaWAN/LmHandler/lorawan_version.h \
  ../Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/subghz_phy_version.h \
  ../LoRaWAN/App/lora_info.h \
@@ -59,10 +64,11 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
  ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandlerTypes.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacInterfaces.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h \
- ../LoRaWAN/Target/timer.h ../LoRaWAN/Target/systime.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/timer.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/systime.h \
  ../Utilities/misc/stm32_systime.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacVersion.h \
- ../LoRaWAN/Target/lorawan_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/lorawan_conf.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h \
@@ -72,11 +78,16 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/secure-element-nvm.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacClassBNvm.h \
  ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h \
- ../Core/Inc/adc_if.h ../Core/Inc/adc.h ../Core/Inc/platform.h \
- ../LoRaWAN/App/CayenneLpp.h ../Core/Inc/sys_sensors.h \
- ../Core/Inc/flash_if.h ../Core/Inc/usart_if.h ../Core/Inc/usart.h \
- ../Core/Inc/dma.h
-../Core/Inc/platform.h:
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/adc_if.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/adc.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/platform.h \
+ ../LoRaWAN/App/CayenneLpp.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_sensors.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/flash_if.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart_if.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/dma.h
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/platform.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wle5xx.h:
 ../Drivers/CMSIS/Include/core_cm4.h:
@@ -86,7 +97,7 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
 ../Drivers/CMSIS/Include/mpu_armv7.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/system_stm32wlxx.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h:
-../Core/Inc/stm32wlxx_hal_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h:
@@ -117,24 +128,24 @@ LoRaWAN/App/lora_app.o: ../LoRaWAN/App/lora_app.c ../Core/Inc/platform.h \
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart_ex.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_system.h:
-../Core/Inc/main.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/main.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_gpio.h:
 D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_radio.h:
 D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo_errno.h:
-../Core/Inc/stm32wlxx_nucleo_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_nucleo_conf.h:
 D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo.h:
-../Core/Inc/sys_app.h:
-../Core/Inc/sys_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_app.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_conf.h:
 ../Utilities/trace/adv_trace/stm32_adv_trace.h:
-../Core/Inc/utilities_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h:
 ../Drivers/CMSIS/Include/cmsis_compiler.h:
 ../Utilities/misc/stm32_mem.h:
 ../Utilities/misc/stm32_tiny_vsnprintf.h:
-../Core/Inc/utilities_def.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h:
 ../LoRaWAN/App/lora_app.h:
 ../Utilities/sequencer/stm32_seq.h:
 ../Utilities/timer/stm32_timer.h:
-../Core/Inc/utilities_def.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h:
 ../LoRaWAN/App/app_version.h:
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/lorawan_version.h:
 ../Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/subghz_phy_version.h:
@@ -143,11 +154,11 @@ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo
 ../Middlewares/Third_Party/LoRaWAN/LmHandler/LmHandlerTypes.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacInterfaces.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h:
-../LoRaWAN/Target/timer.h:
-../LoRaWAN/Target/systime.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/timer.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/systime.h:
 ../Utilities/misc/stm32_systime.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacVersion.h:
-../LoRaWAN/Target/lorawan_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/LoRaWAN/Target/lorawan_conf.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionNvm.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacTypes.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h:
@@ -157,12 +168,12 @@ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Drivers/BSP/STM32WLxx_Nucleo/stm32wlxx_nucleo
 ../Middlewares/Third_Party/LoRaWAN/Mac/secure-element-nvm.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/LoRaMacClassBNvm.h:
 ../Middlewares/Third_Party/LoRaWAN/Mac/Region/RegionVersion.h:
-../Core/Inc/adc_if.h:
-../Core/Inc/adc.h:
-../Core/Inc/platform.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/adc_if.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/adc.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/platform.h:
 ../LoRaWAN/App/CayenneLpp.h:
-../Core/Inc/sys_sensors.h:
-../Core/Inc/flash_if.h:
-../Core/Inc/usart_if.h:
-../Core/Inc/usart.h:
-../Core/Inc/dma.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/sys_sensors.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/flash_if.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart_if.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/dma.h:

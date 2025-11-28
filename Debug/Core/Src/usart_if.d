@@ -1,11 +1,15 @@
-Core/Src/usart_if.o: ../Core/Src/usart_if.c ../Core/Inc/usart_if.h \
+Core/Src/usart_if.o: ../Core/Src/usart_if.c \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart_if.h \
  ../Utilities/trace/adv_trace/stm32_adv_trace.h \
- ../Core/Inc/utilities_conf.h ../Drivers/CMSIS/Include/cmsis_compiler.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h \
+ ../Drivers/CMSIS/Include/cmsis_compiler.h \
  ../Drivers/CMSIS/Include/cmsis_gcc.h ../Utilities/misc/stm32_mem.h \
- ../Utilities/misc/stm32_tiny_vsnprintf.h ../Core/Inc/utilities_def.h \
- ../Core/Inc/usart.h ../Core/Inc/main.h \
+ ../Utilities/misc/stm32_tiny_vsnprintf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/main.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h \
- ../Core/Inc/stm32wlxx_hal_conf.h \
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h \
  ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h \
@@ -43,19 +47,19 @@ Core/Src/usart_if.o: ../Core/Src/usart_if.c ../Core/Inc/usart_if.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart_ex.h \
  ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_system.h \
- ../Core/Inc/dma.h
-../Core/Inc/usart_if.h:
+ D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/dma.h
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart_if.h:
 ../Utilities/trace/adv_trace/stm32_adv_trace.h:
-../Core/Inc/utilities_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_conf.h:
 ../Drivers/CMSIS/Include/cmsis_compiler.h:
 ../Drivers/CMSIS/Include/cmsis_gcc.h:
 ../Utilities/misc/stm32_mem.h:
 ../Utilities/misc/stm32_tiny_vsnprintf.h:
-../Core/Inc/utilities_def.h:
-../Core/Inc/usart.h:
-../Core/Inc/main.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/utilities_def.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/usart.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/main.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal.h:
-../Core/Inc/stm32wlxx_hal_conf.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/stm32wlxx_hal_conf.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_dma.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_def.h:
 ../Drivers/CMSIS/Device/ST/STM32WLxx/Include/stm32wlxx.h:
@@ -93,4 +97,4 @@ Core/Src/usart_if.o: ../Core/Src/usart_if.c ../Core/Inc/usart_if.h \
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_hal_uart_ex.h:
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_system.h:
-../Core/Inc/dma.h:
+D:/Wedo/Seeed-LoRa-E5-From-Scratch/Core/Inc/dma.h:

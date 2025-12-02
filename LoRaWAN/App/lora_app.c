@@ -45,18 +45,9 @@
 /* Fallback defines: if the project or board headers do not define these, provide
    conservative defaults to allow compilation. If your project defines them
    elsewhere these will be ignored. */
-#ifndef LED_PERIOD_TIME
-#define LED_PERIOD_TIME 200U
-#endif
 
-#ifndef JOIN_TIME
-#define JOIN_TIME 600000U
-#endif
 
-#ifndef LORAWAN_NVM_BASE_ADDRESS
-/* Default NVM base address fallback (tune to your board's flash map if needed) */
-#define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
-#endif
+
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -111,7 +102,18 @@ typedef enum TxEventType_e
 #define LORAWAN_NVM_BASE_ADDRESS                    ((void *)0x0803F000UL)
 
 /* USER CODE BEGIN PD */
+#ifndef LORAWAN_NVM_BASE_ADDRESS
+/* Default NVM base address fallback (tune to your board's flash map if needed) */
+#define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
+#endif
 
+#ifndef LED_PERIOD_TIME
+#define LED_PERIOD_TIME 200U
+#endif
+
+#ifndef JOIN_TIME
+#define JOIN_TIME 600000U
+#endif
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

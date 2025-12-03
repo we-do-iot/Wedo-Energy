@@ -639,7 +639,7 @@ static void SendTxData(void)
   // Si lo reseteamos aqui, la proxima vez que entre (por timer LoRaWAN) sera 0 y leera de nuevo. Correcto.
   meter_retry_count = 0; 
   
-  /* USER CODE END SendTxData_1 */
+
   LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
   UTIL_TIMER_Time_t nextTxIn = 0;
   uint32_t payload_index = 0;

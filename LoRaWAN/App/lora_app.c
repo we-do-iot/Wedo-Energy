@@ -352,6 +352,8 @@ static const char *slotStrings[] = { "NONE", "RX1", "RX2", "C", "P", "MULTI" };
 
 static UTIL_TIMER_Object_t MeterTimeoutTimer;
 static uint8_t meter_retry_count = 0;
+static char meter_data_buffer[512];  // Buffer local para datos del medidor
+static uint16_t meter_data_length = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -361,9 +363,21 @@ void LoRaWAN_NotifyMeterDataReady(void)
   if (meter_retry_count > 0)
   {
     UTIL_TIMER_Stop(&MeterTimeoutTimer);
-    meter_data_ready = 1;
-    APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos. Iniciando envio LoRaWAN.\r\n");
-    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    
+    // Copiar datos del buffer UART al buffer local antes de que se borren
+    if (uart_rx_index < sizeof(meter_data_buffer))
+    {
+      memcpy(meter_data_buffer, uart_rx_buffer, uart_rx_index);
+      meter_data_buffer[uart_rx_index] = '\0';  // Asegurar terminación
+      meter_data_length = uart_rx_index;
+      meter_data_ready = 1;
+      APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos (%d bytes). Iniciando envio LoRaWAN.\r\n", meter_data_length);
+      UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "ERROR: Datos del medidor demasiado grandes (%d bytes)\r\n", uart_rx_index);
+    }
   }
   else
   {
@@ -520,8 +534,13 @@ static void OnMeterTimeoutTimerEvent(void *context)
   }
   else
   {
+    // Se agotaron los reintentos
     APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Maximos reintentos alcanzados. Enviando datos parciales.\r\n");
-    meter_data_ready = 0; // Asegurar que no hay datos validos
+    
+    // Deshabilitar recepción UART hasta próxima solicitud
+    HAL_UART_AbortReceive_IT(&huart1);
+    
+    meter_data_ready = 0; // NO hay datos
     UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
   }
 }
@@ -701,7 +720,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x0A: Energía activa total (15.8.0) - 4 bytes en Wh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "15.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "15.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t energia_kwh = (uint32_t)(valor_float);  // kWh a Wh
       AppData.Buffer[payload_index++] = 0x0A;  // ID
@@ -713,7 +732,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x0B: Energía reactiva total (130.8.0) - 4 bytes en VArh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "130.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "130.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t reactiva_kvarh = (uint32_t)(valor_float);  // kVArh a VArh
       AppData.Buffer[payload_index++] = 0x0B;  // ID
@@ -725,7 +744,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x28: Demanda máxima potencia (1.6.0) - 2 bytes en W =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "1.6.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "1.6.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 65.535f) {
       uint16_t peak_demand_kw = (uint16_t)(valor_float);  // kW a W
       AppData.Buffer[payload_index++] = 0x28;  // ID
@@ -735,7 +754,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x3C: Energía activa consumida (1.8.0) - 4 bytes en Wh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "1.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "1.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t consumida_kwh = (uint32_t)(valor_float);
       AppData.Buffer[payload_index++] = 0x3C;  // ID
@@ -747,7 +766,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x3D: Energía activa generada (2.8.0) - 4 bytes en Wh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "2.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "2.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t generada_kwh = (uint32_t)(valor_float);
       AppData.Buffer[payload_index++] = 0x3D;  // ID
@@ -759,7 +778,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x3E: Energía reactiva consumida (3.8.0) - 4 bytes en VArh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "3.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "3.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t reactiva_cons_kvarh = (uint32_t)(valor_float);
       AppData.Buffer[payload_index++] = 0x3E;  // ID
@@ -771,7 +790,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x3F: Energía reactiva generada (4.8.0) - 4 bytes en VArh =====
-      parse_ok = ParseOBISFloat(uart_rx_buffer, "4.8.0(", &valor_float);
+      parse_ok = ParseOBISFloat(meter_data_buffer, "4.8.0(", &valor_float);
     if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
       uint32_t reactiva_gen_kvarh = (uint32_t)(valor_float);
       AppData.Buffer[payload_index++] = 0x3F;  // ID
@@ -783,7 +802,7 @@ static void SendTxData(void)
     }
 
       // ===== 0x5A: Número de serie (C.1.0) - 4 bytes =====
-    parse_ok = ParseOBISUint32(uart_rx_buffer, "C.1.0(", &valor_uint32);
+    parse_ok = ParseOBISUint32(meter_data_buffer, "C.1.0(", &valor_uint32);
     if (parse_ok && valor_uint32 != 0) {
       AppData.Buffer[payload_index++] = 0x5A;  // ID
       AppData.Buffer[payload_index++] = (valor_uint32 >> 24) & 0xFF;

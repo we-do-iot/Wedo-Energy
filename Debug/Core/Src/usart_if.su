@@ -8,4 +8,4 @@
 ../Core/Src/usart_if.c:166:25:vcom_ReceiveInit	24	static
 ../Core/Src/usart_if.c:202:6:vcom_Resume	8	static
 ../Core/Src/usart_if.c:217:6:HAL_UART_TxCpltCallback	16	static
-../Core/Src/usart_if.c:232:6:HAL_UART_RxCpltCallback	24	static
+../Core/Src/usart_if.c:232:6:HAL_UART_RxCpltCallback	88	static

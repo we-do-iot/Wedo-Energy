@@ -128,7 +128,8 @@ int main(void)
   HAL_UARTEx_EnableStopMode(&huart1);
   // Registrar tarea UART en el scheduler
   HAL_UART_Transmit(&huart1, (uint8_t*)iniciouart1, strlen(iniciouart1), HAL_MAX_DELAY);
-  HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
+  // NO iniciar recepción UART aquí - solo cuando se solicite lectura del medidor
+  // HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -137,19 +138,12 @@ while (1)
 {
   // Procesar datos UART del medidor
   if (uart_rx_complete) {
-    // Copiar datos a buffer permanente si es necesario
-    // (uart_rx_buffer ya tiene los datos)
-    
-    // Activar flag para LoRaWAN
-    meter_data_ready = 1;
-    
-    // Resetear flag de recepción
-    uart_rx_complete = 0;
-    
-    // Reiniciar índice para próxima recepción
-    uart_rx_index = 0;
-    
+    // Procesar ANTES de resetear (ProcessUartData necesita uart_rx_index)
     ProcessUartData();
+    
+    // Ahora sí, resetear flags (ProcessUartData ya lo hace, pero por seguridad)
+    // uart_rx_complete = 0;  // Ya lo hace ProcessUartData
+    // uart_rx_index = 0;      // Ya lo hace ProcessUartData
   }
   
     /* USER CODE END WHILE */
@@ -229,12 +223,20 @@ void RequestMeterRead(uint8_t attempt)
     snprintf(msg, sizeof(msg), "\r\n[APP] Solicitando lectura del medidor... Intento %u\r\n", attempt);
     HAL_UART_Transmit(&hlpuart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 
+    // Resetear buffer y flags
+    uart_rx_index = 0;
+    uart_rx_complete = 0;
+    meter_data_ready = 0;
+    
+    // Habilitar recepción UART SOLO cuando solicitamos datos
+    HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
+
     // Si tu medidor necesita un comando para responder, envialo aquí:
     // Ejemplo para IEC 62056-21:
     // char cmd[] = "/?!\r\n";  // Comando de solicitud
     // HAL_UART_Transmit(&huart1, (uint8_t*)cmd, strlen(cmd), HAL_MAX_DELAY);
 
-    // Nota: Si el medidor envía datos automáticamente, no necesitas enviar nada
+    // Nota: El medidor enviará datos automáticamente
     // Los datos llegarán por el callback y se procesarán en ProcessUartData()
 }
 
@@ -243,6 +245,11 @@ void RequestMeterRead(uint8_t attempt)
  */
 static void ProcessUartData(void)
 {
+    // DEBUG: Ver estado del buffer
+    char dbg_msg[80];
+    snprintf(dbg_msg, sizeof(dbg_msg), "DEBUG ProcessUartData: uart_rx_index=%d uart_rx_complete=%d\r\n", uart_rx_index, uart_rx_complete);
+    HAL_UART_Transmit(&huart1, (uint8_t*)dbg_msg, strlen(dbg_msg), HAL_MAX_DELAY);
+    
     char header[] = "\r\n>>> TRAMA COMPLETA <<<\r\n";
     HAL_UART_Transmit(&huart1, (uint8_t*)header, strlen(header), HAL_MAX_DELAY);
     HAL_UART_Transmit(&huart1, (uint8_t*)uart_rx_buffer, uart_rx_index, HAL_MAX_DELAY);
@@ -251,10 +258,10 @@ static void ProcessUartData(void)
     HAL_UART_Transmit(&huart1, (uint8_t*)footer, strlen(footer), HAL_MAX_DELAY);
 
     // Marcar que hay datos listos para enviar por LoRaWAN
-    // Marcar que hay datos listos para enviar por LoRaWAN
-    // meter_data_ready = 1; // Ya no se usa directamente aqui, se notifica a lora_app
     LoRaWAN_NotifyMeterDataReady();
 
+    // No es necesario HAL_UART_AbortReceive_IT() - el callback ya detuvo la recepción
+    
     uart_rx_complete = 0;
     uart_rx_index = 0;
 }

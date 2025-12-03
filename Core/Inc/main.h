@@ -53,7 +53,7 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void RequestMeterRead(uint8_t attempt);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

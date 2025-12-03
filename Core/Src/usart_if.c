@@ -242,6 +242,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                 char *marker = strstr(uart_rx_buffer, "C.1.0(");
                 if (marker != NULL && (uart_rx_buffer + uart_rx_index - 1) > (marker + 6)) {
                     uart_rx_complete = 1;
+                    // DEBUG: Log cuando se completa la trama
+                    char dbg[64];
+                    snprintf(dbg, sizeof(dbg), "DEBUG: Trama completa detectada, %d bytes\r\n", uart_rx_index);
+                    HAL_UART_Transmit(&huart1, (uint8_t*)dbg, strlen(dbg), 100);
                 }
             }
         }
@@ -252,7 +256,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             memset(uart_rx_buffer, 0, UART_BUFFER_SIZE);
         }
 
-        HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
+        // Solo continuar recibiendo si NO se completó la trama
+        if (!uart_rx_complete) {
+            HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
+        }
         return;
     }
   /* USER CODE END HAL_UART_RxCpltCallback_1 */

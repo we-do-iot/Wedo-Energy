@@ -1,8 +1,8 @@
 ../Drivers/STM32WLxx_HAL_Driver/Inc/stm32wlxx_ll_rcc.h:1257:22:LL_RCC_LSE_SetDriveCapability	1
 ../Core/Src/main.c:64:5:__io_putchar	1
 ../Core/Src/main.c:85:5:main	4
-../Core/Src/main.c:167:6:SystemClock_Config	3
-../Core/Src/main.c:215:13:OnLedTimerEvent	1
-../Core/Src/main.c:226:6:RequestMeterRead	1
-../Core/Src/main.c:244:13:ProcessUartData	1
-../Core/Src/main.c:267:6:Error_Handler	1
+../Core/Src/main.c:161:6:SystemClock_Config	3
+../Core/Src/main.c:209:13:OnLedTimerEvent	1
+../Core/Src/main.c:220:6:RequestMeterRead	1
+../Core/Src/main.c:246:13:ProcessUartData	1
+../Core/Src/main.c:274:6:Error_Handler	1

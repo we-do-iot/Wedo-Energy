@@ -42,17 +42,11 @@
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
 #include "obis_helpers.h"
 
-/* Fallback defines: if the project or board headers do not define these, provide
-   conservative defaults to allow compilation. If your project defines them
-   elsewhere these will be ignored. */
-
-
-
-/* USER CODE END Includes */
 #define METER_MAX_RETRIES 3
 #define METER_READ_TIMEOUT 6000
 
 extern void RequestMeterRead(uint8_t attempt);
+/* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
@@ -244,60 +238,12 @@ static void OnPingSlotPeriodicityChanged(uint8_t pingSlotPeriodicity);
 static void OnSystemReset(void);
 
 /* USER CODE BEGIN PFP */
-
-/**
-  * @brief  LED Tx timer callback function
-  * @param  context ptr of LED context
-  */
-static void OnTxTimerLedEvent(void *context);
-
-/**
-  * @brief  LED Rx timer callback function
-  * @param  context ptr of LED context
-  */
-static void OnRxTimerLedEvent(void *context);
-
-/**
-  * @brief  LED Join timer callback function
-  * @param  context ptr of LED context
-  */
-static void OnJoinTimerLedEvent(void *context);
-
-/**
-  * @brief  Parse OBIS float value from buffer
-  * @param  buffer pointer to the OBIS buffer
-  * @param  marker OBIS marker string (e.g., "1.8.0(")
-  * @param  result pointer to store the parsed float value
-  * @retval true if parsing successful, false otherwise
-  */
-/* OBIS parser moved to LoRaWAN/App/obis_helpers.c to avoid being overwritten by CubeMX */
-
-/* Forward declarations for callbacks and local functions used by the LmHandler
-  These must be visible before the LmHandlerCallbacks structure initialization. */
-static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size);
-static void OnStoreContextRequest(void *nvm, uint32_t nvm_size);
-static void OnNvmDataChange(LmHandlerNvmContextStates_t state);
-static void OnJoinRequest(LmHandlerJoinParams_t *joinParams);
-static void OnTxData(LmHandlerTxParams_t *params);
-static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params);
-static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params);
-static void OnSysTimeUpdate(void);
-static void OnClassChange(DeviceClass_t deviceClass);
-static void SendTxData(void);
-static void OnTxTimerEvent(void *context);
-static void StoreContext(void);
-static void StopJoin(void);
-static void OnStopJoinTimerEvent(void *context);
 static void OnTxTimerLedEvent(void *context);
 static void OnRxTimerLedEvent(void *context);
 static void OnJoinTimerLedEvent(void *context);
-static void OnTxPeriodicityChanged(uint32_t periodicity);
-static void OnTxFrameCtrlChanged(LmHandlerMsgTypes_t isTxConfirmed);
-static void OnPingSlotPeriodicityChanged(uint8_t pingSlotPeriodicity);
-static void OnSystemReset(void);
-
 static void OnMeterTimeoutTimerEvent(void *context);
 static void StartMeterReading(void);
+/* USER CODE END PFP */
 
 
 /* USER CODE END PFP */
@@ -409,14 +355,10 @@ static const char *slotStrings[] = { "NONE", "RX1", "RX2", "C", "P", "MULTI" };
 
 static UTIL_TIMER_Object_t MeterTimeoutTimer;
 static uint8_t meter_retry_count = 0;
-
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
-
-/* USER CODE END EF */
-
 void LoRaWAN_NotifyMeterDataReady(void)
 {
   UTIL_TIMER_Stop(&MeterTimeoutTimer);
@@ -424,36 +366,7 @@ void LoRaWAN_NotifyMeterDataReady(void)
   APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos. Iniciando envio LoRaWAN.\r\n");
   UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
 }
-
-static void StartMeterReading(void)
-{
-  meter_retry_count = 0;
-  meter_data_ready = 0; // Invalidar datos anteriores
-  
-  // Iniciar primer intento
-  meter_retry_count++;
-  RequestMeterRead(meter_retry_count);
-  
-  // Iniciar timer de timeout
-  UTIL_TIMER_Start(&MeterTimeoutTimer);
-}
-
-static void OnMeterTimeoutTimerEvent(void *context)
-{
-  if (meter_retry_count < METER_MAX_RETRIES)
-  {
-    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Reintentando (%d/%d)...\r\n", meter_retry_count, METER_MAX_RETRIES);
-    meter_retry_count++;
-    RequestMeterRead(meter_retry_count);
-    UTIL_TIMER_Start(&MeterTimeoutTimer);
-  }
-  else
-  {
-    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Maximos reintentos alcanzados. Enviando datos parciales.\r\n");
-    meter_data_ready = 0; // Asegurar que no hay datos validos
-    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
-  }
-}
+/* USER CODE END EF */
 
 void LoRaWAN_Init(void)
 {
@@ -579,7 +492,35 @@ char ledpulado[] = "Led pulsado\r\n";
 
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
+static void StartMeterReading(void)
+{
+  meter_retry_count = 0;
+  meter_data_ready = 0; // Invalidar datos anteriores
+  
+  // Iniciar primer intento
+  meter_retry_count++;
+  RequestMeterRead(meter_retry_count);
+  
+  // Iniciar timer de timeout
+  UTIL_TIMER_Start(&MeterTimeoutTimer);
+}
 
+static void OnMeterTimeoutTimerEvent(void *context)
+{
+  if (meter_retry_count < METER_MAX_RETRIES)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Reintentando (%d/%d)...\r\n", meter_retry_count, METER_MAX_RETRIES);
+    meter_retry_count++;
+    RequestMeterRead(meter_retry_count);
+    UTIL_TIMER_Start(&MeterTimeoutTimer);
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Maximos reintentos alcanzados. Enviando datos parciales.\r\n");
+    meter_data_ready = 0; // Asegurar que no hay datos validos
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+}
 /* USER CODE END PrFD */
 
 static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
@@ -666,6 +607,39 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
+  // Si no tenemos datos listos y no estamos en medio de un reintento (esto se puede saber si el timer esta activo, pero
+  // mas facil es usar una flag o simplemente: si meter_data_ready es 0, iniciamos lectura y retornamos).
+  // PERO CUIDADO: Si el timeout expiro, meter_data_ready es 0 y DEBEMOS enviar.
+  // Como distinguimos "toca leer" de "fallo lectura"?
+  // Podemos usar meter_retry_count. Si es 0, es que aun no empezamos.
+  // Si es > 0, es que estamos en proceso o terminamos.
+  // Si terminamos por timeout, meter_retry_count sera >= METER_MAX_RETRIES (o lo reseteamos?)
+  
+  // Mejor enfoque:
+  // Si meter_retry_count == 0, iniciamos lectura y salimos.
+  // Si meter_retry_count > 0, verificamos:
+  //    Si meter_data_ready == 1, enviamos.
+  //    Si meter_data_ready == 0, significa que fallo (timeout). Enviamos lo que hay.
+  
+  // Hay un caso borde: El timer de LoRaWAN dispara SendTxData.
+  // Nosotros interceptamos aqui.
+  
+  if (meter_retry_count == 0) {
+      APP_LOG(TS_ON, VLEVEL_M, "Ciclo LoRaWAN: Iniciando lectura de medidor...\r\n");
+      StartMeterReading();
+      return; // Salimos para esperar a que termine la lectura
+  }
+  
+  // Si llegamos aqui, es porque:
+  // 1. LoRaWAN_NotifyMeterDataReady llamo a SendTxData (exito)
+  // 2. OnMeterTimeoutTimerEvent llamo a SendTxData (fallo)
+  
+  // En ambos casos, procedemos a enviar.
+  // IMPORTANTE: Resetear meter_retry_count para la proxima vez?
+  // Si lo reseteamos aqui, la proxima vez que entre (por timer LoRaWAN) sera 0 y leera de nuevo. Correcto.
+  meter_retry_count = 0; 
+  
+  /* USER CODE END SendTxData_1 */
   LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
   UTIL_TIMER_Time_t nextTxIn = 0;
   uint32_t payload_index = 0;
@@ -898,12 +872,12 @@ static void OnTxTimerEvent(void *context)
   /* USER CODE BEGIN OnTxTimerEvent_1 */
 
   /* USER CODE END OnTxTimerEvent_1 */
-  // UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
 
   /*Wait for next tx slot*/
   UTIL_TIMER_Start(&TxTimer);
   /* USER CODE BEGIN OnTxTimerEvent_2 */
-  StartMeterReading();
+
   /* USER CODE END OnTxTimerEvent_2 */
 }
 

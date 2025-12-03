@@ -358,10 +358,17 @@ static uint8_t meter_retry_count = 0;
 /* USER CODE BEGIN EF */
 void LoRaWAN_NotifyMeterDataReady(void)
 {
-  UTIL_TIMER_Stop(&MeterTimeoutTimer);
-  meter_data_ready = 1;
-  APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos. Iniciando envio LoRaWAN.\r\n");
-  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  if (meter_retry_count > 0)
+  {
+    UTIL_TIMER_Stop(&MeterTimeoutTimer);
+    meter_data_ready = 1;
+    APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos. Iniciando envio LoRaWAN.\r\n");
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos inesperadamente (ignorado).\r\n");
+  }
 }
 /* USER CODE END EF */
 

@@ -42,8 +42,9 @@
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
 #include "obis_helpers.h"
 
-#define METER_MAX_RETRIES 3
-#define METER_READ_TIMEOUT 6000
+#define METER_MAX_RETRIES 5
+#define METER_READ_TIMEOUT 7000
+#define METER_EXPECTED_BYTES 276
 
 extern void RequestMeterRead(uint8_t attempt);
 /* USER CODE END Includes */
@@ -363,6 +364,29 @@ void LoRaWAN_NotifyMeterDataReady(void)
   if (meter_retry_count > 0)
   {
     UTIL_TIMER_Stop(&MeterTimeoutTimer);
+    
+    // Validar que sean exactamente 276 bytes
+    if (uart_rx_index != METER_EXPECTED_BYTES)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "ERROR: Datos incorrectos (%d bytes, esperados %d). Reintentando...\r\n", uart_rx_index, METER_EXPECTED_BYTES);
+      
+      // Reintentar si no hemos agotado los intentos
+      if (meter_retry_count < METER_MAX_RETRIES)
+      {
+        meter_retry_count++;
+        RequestMeterRead(meter_retry_count);
+        UTIL_TIMER_Start(&MeterTimeoutTimer);
+      }
+      else
+      {
+        // Agoté reintentos con datos incorrectos
+        APP_LOG(TS_ON, VLEVEL_M, "Maximos reintentos alcanzados con datos incorrectos.\r\n");
+        HAL_UART_AbortReceive_IT(&huart1);
+        meter_data_ready = 0;
+        UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+      }
+      return;
+    }
     
     // Copiar datos del buffer UART al buffer local antes de que se borren
     if (uart_rx_index < sizeof(meter_data_buffer))

@@ -601,12 +601,12 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
                 if (AppLedStateOn == RESET)
                 {
                   APP_LOG(TS_OFF, VLEVEL_H, "LED OFF\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET); /* LED_RED */
+                  // HAL_GPIO_WritePin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin, GPIO_PIN_SET); /* Disabled - POWER_SENSE is input */
                 }
                 else
                 {
                   APP_LOG(TS_OFF, VLEVEL_H, "LED ON\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); /* LED_RED */
+                  // HAL_GPIO_WritePin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin, GPIO_PIN_RESET); /* Disabled - POWER_SENSE is input */
                 }
               }
               break;
@@ -710,7 +710,7 @@ static void SendTxData(void)
     /* ===== 0x04: network_state (1 byte) - detect external 3.3V on PB5 ===== */
     {
       uint8_t net_state = 0;
-      if (HAL_GPIO_ReadPin(LED2_GPIO_Port, LED2_Pin) == GPIO_PIN_SET)
+      if (HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin) == GPIO_PIN_SET)
       {
         net_state = 1; /* external 3.3V present */
       }
@@ -842,7 +842,7 @@ static void SendTxData(void)
 
       /* Add network_state TLV (0x04) */
       uint8_t net_state = 0;
-      if (HAL_GPIO_ReadPin(LED2_GPIO_Port, LED2_Pin) == GPIO_PIN_SET)
+      if (HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin) == GPIO_PIN_SET)
       {
         net_state = 1;
       }

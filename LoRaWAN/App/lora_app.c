@@ -245,9 +245,6 @@ static void OnMeterTimeoutTimerEvent(void *context);
 static void StartMeterReading(void);
 /* USER CODE END PFP */
 
-
-/* USER CODE END PFP */
-
 /* Private variables ---------------------------------------------------------*/
 /**
   * @brief LoRaWAN default activation type
@@ -416,7 +413,6 @@ void LoRaWAN_Init(void)
   /* USER CODE END LoRaWAN_Init_1 */
 
   UTIL_TIMER_Create(&StopJoinTimer, JOIN_TIME, UTIL_TIMER_ONESHOT, OnStopJoinTimerEvent, NULL);
-  UTIL_TIMER_Create(&MeterTimeoutTimer, METER_READ_TIMEOUT, UTIL_TIMER_ONESHOT, OnMeterTimeoutTimerEvent, NULL);
 
   UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LmHandlerProcess), UTIL_SEQ_RFU, LmHandlerProcess);
 

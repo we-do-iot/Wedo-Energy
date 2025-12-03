@@ -148,6 +148,8 @@ while (1)
     
     // Reiniciar índice para próxima recepción
     uart_rx_index = 0;
+    
+    ProcessUartData();
   }
   
     /* USER CODE END WHILE */

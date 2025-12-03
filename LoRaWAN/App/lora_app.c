@@ -49,6 +49,10 @@
 
 
 /* USER CODE END Includes */
+#define METER_MAX_RETRIES 3
+#define METER_READ_TIMEOUT 6000
+
+extern void RequestMeterRead(uint8_t attempt);
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
@@ -292,6 +296,9 @@ static void OnTxFrameCtrlChanged(LmHandlerMsgTypes_t isTxConfirmed);
 static void OnPingSlotPeriodicityChanged(uint8_t pingSlotPeriodicity);
 static void OnSystemReset(void);
 
+static void OnMeterTimeoutTimerEvent(void *context);
+static void StartMeterReading(void);
+
 
 /* USER CODE END PFP */
 
@@ -400,12 +407,53 @@ static UTIL_TIMER_Object_t JoinLedTimer;
 /* Human-readable RX slot strings used in debug logs */
 static const char *slotStrings[] = { "NONE", "RX1", "RX2", "C", "P", "MULTI" };
 
+static UTIL_TIMER_Object_t MeterTimeoutTimer;
+static uint8_t meter_retry_count = 0;
+
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
 
 /* USER CODE END EF */
+
+void LoRaWAN_NotifyMeterDataReady(void)
+{
+  UTIL_TIMER_Stop(&MeterTimeoutTimer);
+  meter_data_ready = 1;
+  APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos. Iniciando envio LoRaWAN.\r\n");
+  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+}
+
+static void StartMeterReading(void)
+{
+  meter_retry_count = 0;
+  meter_data_ready = 0; // Invalidar datos anteriores
+  
+  // Iniciar primer intento
+  meter_retry_count++;
+  RequestMeterRead(meter_retry_count);
+  
+  // Iniciar timer de timeout
+  UTIL_TIMER_Start(&MeterTimeoutTimer);
+}
+
+static void OnMeterTimeoutTimerEvent(void *context)
+{
+  if (meter_retry_count < METER_MAX_RETRIES)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Reintentando (%d/%d)...\r\n", meter_retry_count, METER_MAX_RETRIES);
+    meter_retry_count++;
+    RequestMeterRead(meter_retry_count);
+    UTIL_TIMER_Start(&MeterTimeoutTimer);
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Maximos reintentos alcanzados. Enviando datos parciales.\r\n");
+    meter_data_ready = 0; // Asegurar que no hay datos validos
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+}
 
 void LoRaWAN_Init(void)
 {
@@ -455,6 +503,7 @@ void LoRaWAN_Init(void)
   /* USER CODE END LoRaWAN_Init_1 */
 
   UTIL_TIMER_Create(&StopJoinTimer, JOIN_TIME, UTIL_TIMER_ONESHOT, OnStopJoinTimerEvent, NULL);
+  UTIL_TIMER_Create(&MeterTimeoutTimer, METER_READ_TIMEOUT, UTIL_TIMER_ONESHOT, OnMeterTimeoutTimerEvent, NULL);
 
   UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LmHandlerProcess), UTIL_SEQ_RFU, LmHandlerProcess);
 
@@ -623,7 +672,7 @@ static void SendTxData(void)
 
   AppData.Port = LORAWAN_USER_APP_PORT;
 
-  // Verificar si hay datos del medidor listos
+  // Verificar si hay datos del medidor listos (y que no sea un envio forzado por error de lectura)
   if (meter_data_ready) {
       APP_LOG(TS_ON, VLEVEL_M, "Construyendo payload TLV desde datos OBIS...\r\n");
 
@@ -773,7 +822,7 @@ static void SendTxData(void)
 
   } else {
       // Sin datos del medidor, enviar solo batería
-      APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor, enviando solo bateria\r\n");
+      APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor (o fallo lectura), enviando solo bateria y estado\r\n");
     {
       /* Fallback: send battery + network_state */
       uint8_t bateria_level_lora = GetBatteryLevel();
@@ -849,12 +898,12 @@ static void OnTxTimerEvent(void *context)
   /* USER CODE BEGIN OnTxTimerEvent_1 */
 
   /* USER CODE END OnTxTimerEvent_1 */
-  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  // UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
 
   /*Wait for next tx slot*/
   UTIL_TIMER_Start(&TxTimer);
   /* USER CODE BEGIN OnTxTimerEvent_2 */
-
+  StartMeterReading();
   /* USER CODE END OnTxTimerEvent_2 */
 }
 

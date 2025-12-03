@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include "usart_if.h"
 #include "stm32_timer.h"  // Para el timer del LED
+#include "lora_app.h" // Para LoRaWAN_NotifyMeterDataReady
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,7 +68,8 @@ int __io_putchar(int ch)
 }
 static void ProcessUartData(void);
 static void OnLedTimerEvent(void *context);  // Callback del timer
-static void RequestMeterRead(void);          // Solicitar lectura
+
+void RequestMeterRead(uint8_t attempt);          // Solicitar lectura
 
 /* USER CODE END PFP */
 
@@ -216,10 +218,14 @@ static void OnLedTimerEvent(void *context)
 /**
  * @brief Solicita lectura del medidor (envía comando si es necesario)
  */
-static void RequestMeterRead(void)
+/**
+ * @brief Solicita lectura del medidor (envía comando si es necesario)
+ */
+void RequestMeterRead(uint8_t attempt)
 {
-    char msg[] = "\r\n[BOTON] Solicitando lectura del medidor...\r\n";
-    HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "\r\n[APP] Solicitando lectura del medidor... Intento %u\r\n", attempt);
+    HAL_UART_Transmit(&hlpuart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 
     // Si tu medidor necesita un comando para responder, envialo aquí:
     // Ejemplo para IEC 62056-21:
@@ -243,7 +249,9 @@ static void ProcessUartData(void)
     HAL_UART_Transmit(&huart1, (uint8_t*)footer, strlen(footer), HAL_MAX_DELAY);
 
     // Marcar que hay datos listos para enviar por LoRaWAN
-    meter_data_ready = 1;
+    // Marcar que hay datos listos para enviar por LoRaWAN
+    // meter_data_ready = 1; // Ya no se usa directamente aqui, se notifica a lora_app
+    LoRaWAN_NotifyMeterDataReady();
 
     uart_rx_complete = 0;
     uart_rx_index = 0;

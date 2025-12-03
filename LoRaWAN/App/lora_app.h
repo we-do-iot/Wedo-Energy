@@ -143,7 +143,7 @@ extern "C" {
 void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
-
+void LoRaWAN_NotifyMeterDataReady(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

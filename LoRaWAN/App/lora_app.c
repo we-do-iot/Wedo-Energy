@@ -146,6 +146,9 @@ typedef struct
 #define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
 #endif
 
+/* Device config Flash address - use a separate page from LoRaWAN NVM */
+#define DEVICE_CONFIG_FLASH_ADDRESS ((void *)0x0803E000UL)
+
 #ifndef LED_PERIOD_TIME
 #define LED_PERIOD_TIME 200U
 #endif
@@ -284,6 +287,8 @@ static void OnRxTimerLedEvent(void *context);
 static void OnJoinTimerLedEvent(void *context);
 static void OnMeterTimeoutTimerEvent(void *context);
 static void StartMeterReading(void);
+static void SaveDeviceConfig(void);
+static void LoadDeviceConfig(void);
 static void OnButtonShortTimerEvent(void *context);
 static void OnButtonVeryLongTimerEvent(void *context);
 static void OnButtonDoubleTimerEvent(void *context);
@@ -419,6 +424,12 @@ static DeviceConfig_t device_config = {
 
 /* Pending reset flag: set when reset command is received, executed after next uplink */
 static volatile uint8_t pending_reset = 0;
+
+/* Flash RAM buffer for page backup during write operations (2KB = FLASH_PAGE_SIZE) */
+static uint8_t flash_ram_buffer[FLASH_IF_BUFFER_SIZE];
+
+/* Flag to track if we have joined the network in this session */
+static uint8_t is_joined = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -545,6 +556,13 @@ void LoRaWAN_Init(void)
 
   /* USER CODE BEGIN LoRaWAN_Init_2 */
   UTIL_TIMER_Start(&JoinLedTimer);
+  
+  /* Initialize Flash interface with RAM buffer for page backup */
+  FLASH_IF_Init(flash_ram_buffer);
+  
+  /* Load device configuration from Flash and apply saved reporting interval */
+  LoadDeviceConfig();
+  ApplyReportingInterval();
 
   /* USER CODE END LoRaWAN_Init_2 */
 
@@ -552,9 +570,8 @@ void LoRaWAN_Init(void)
 
   if (EventType == TX_ON_TIMER)
   {
-    /* send every time timer elapses */
+    /* Create timer but don't start - will start after successful JOIN */
     UTIL_TIMER_Create(&TxTimer, TxPeriodicity, UTIL_TIMER_ONESHOT, OnTxTimerEvent, NULL);
-    UTIL_TIMER_Start(&TxTimer);
   }
   else
   {
@@ -775,6 +792,9 @@ static void SetReportingInterval(uint16_t interval_seconds)
             (int)device_config.reporting_interval_ms);
   }
   
+  // Save to Flash for persistence across resets
+  SaveDeviceConfig();
+  
   // Apply immediately
   ApplyReportingInterval();
 }
@@ -801,8 +821,8 @@ static void ApplyReportingInterval(void)
   // Update global periodicity variable
   TxPeriodicity = interval_ms;
   
-  // Update and restart timer if it exists
-  if (EventType == TX_ON_TIMER)
+  // Only restart timer if already joined in this session
+  if (EventType == TX_ON_TIMER && is_joined)
   {
     UTIL_TIMER_Stop(&TxTimer);
     UTIL_TIMER_SetPeriod(&TxTimer, interval_ms);
@@ -811,6 +831,52 @@ static void ApplyReportingInterval(void)
   }
 }
 
+/**
+  * @brief Save device configuration to Flash
+  */
+static void SaveDeviceConfig(void)
+{
+  FLASH_IF_StatusTypedef status;
+  
+  /* DeviceConfig_t is 8 bytes (4+1+3), aligned to 64-bit for Flash write */
+  status = FLASH_IF_Write(DEVICE_CONFIG_FLASH_ADDRESS, (const void *)&device_config, sizeof(DeviceConfig_t));
+  
+  if (status == FLASH_IF_OK)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Device config saved to Flash\r\n");
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "ERROR: Flash write failed (%d)\r\n", (int)status);
+  }
+}
+
+/**
+  * @brief Load device configuration from Flash
+  */
+static void LoadDeviceConfig(void)
+{
+  DeviceConfig_t loaded_config;
+  
+  FLASH_IF_Read((void *)&loaded_config, DEVICE_CONFIG_FLASH_ADDRESS, sizeof(DeviceConfig_t));
+  
+  /* Validate loaded config */
+  if (loaded_config.config_valid == CONFIG_MAGIC && 
+      loaded_config.reporting_interval_ms > 0 &&
+      loaded_config.reporting_interval_ms < 86400000) /* Max 24 hours */
+  {
+    device_config = loaded_config;
+    APP_LOG(TS_ON, VLEVEL_M, "Device config loaded from Flash: interval=%d ms\r\n", 
+            (int)device_config.reporting_interval_ms);
+  }
+  else
+  {
+    /* Invalid or empty config - use defaults */
+    device_config.reporting_interval_ms = 0;
+    device_config.config_valid = 0;
+    APP_LOG(TS_ON, VLEVEL_M, "No valid config in Flash, using defaults\r\n");
+  }
+}
 
 static void StartMeterReading(void)
 {
@@ -1301,6 +1367,16 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
       else
       {
         APP_LOG(TS_OFF, VLEVEL_M, "OTAA =====================\r\n");
+      }
+      
+      /* Mark as joined in this session */
+      is_joined = 1;
+      
+      /* Start TX timer now that we are joined */
+      if (EventType == TX_ON_TIMER)
+      {
+        UTIL_TIMER_Start(&TxTimer);
+        APP_LOG(TS_ON, VLEVEL_M, "TX Timer started after JOIN\r\n");
       }
     }
     else

@@ -733,6 +733,7 @@ static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
   }
 }
 
+
 /**
   * @brief Set reporting interval
   * @param interval_seconds Interval in seconds (0 = use default)
@@ -750,8 +751,8 @@ static void SetReportingInterval(uint16_t interval_seconds)
   {
     device_config.reporting_interval_ms = (uint32_t)interval_seconds * 1000;
     device_config.config_valid = CONFIG_MAGIC;
-    APP_LOG(TS_ON, VLEVEL_M, "New interval: %lu ms\r\n", 
-            device_config.reporting_interval_ms);
+    APP_LOG(TS_ON, VLEVEL_M, "New interval: %d ms\r\n", 
+            (int)device_config.reporting_interval_ms);
   }
   
   // Apply immediately
@@ -769,12 +770,12 @@ static void ApplyReportingInterval(void)
       device_config.reporting_interval_ms > 0)
   {
     interval_ms = device_config.reporting_interval_ms;
-    APP_LOG(TS_ON, VLEVEL_M, "Using configured interval: %lu ms\r\n", interval_ms);
+    APP_LOG(TS_ON, VLEVEL_M, "Using configured interval: %d ms\r\n", (int)interval_ms);
   }
   else
   {
     interval_ms = APP_TX_DUTYCYCLE;
-    APP_LOG(TS_ON, VLEVEL_M, "Using default interval: %lu ms\r\n", interval_ms);
+    APP_LOG(TS_ON, VLEVEL_M, "Using default interval: %d ms\r\n", (int)interval_ms);
   }
   
   // Update global periodicity variable
@@ -789,6 +790,7 @@ static void ApplyReportingInterval(void)
     APP_LOG(TS_ON, VLEVEL_M, "TX Timer restarted with new interval\r\n");
   }
 }
+
 
 static void StartMeterReading(void)
 {

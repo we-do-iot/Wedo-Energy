@@ -83,7 +83,12 @@ void SYS_InitMeasurement(void)
   /* USER CODE END SYS_InitMeasurement_1 */
   hadc.Instance = ADC;
   /* USER CODE BEGIN SYS_InitMeasurement_2 */
-
+  
+  /* Perform dummy reads after first calibration to stabilize ADC.
+     The first ADC reading after reset can return incorrect values. */
+  (void)SYS_GetBatteryLevel();
+  (void)SYS_GetBatteryLevel();
+  
   /* USER CODE END SYS_InitMeasurement_2 */
 }
 

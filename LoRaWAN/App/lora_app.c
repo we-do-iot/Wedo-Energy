@@ -416,6 +416,9 @@ static DeviceConfig_t device_config = {
   .config_valid = 0,
   .reserved = {0}
 };
+
+/* Pending reset flag: set when reset command is received, executed after next uplink */
+static volatile uint8_t pending_reset = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -732,9 +735,11 @@ static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
     case CMD_RESET:
       if (size >= CMD_0xFF10_SIZE && payload[2] == 0xFF)
       {
-        APP_LOG(TS_ON, VLEVEL_M, "RESET command received - Restarting device...\r\n");
-        HAL_Delay(100); // Give time for log to be sent
-        NVIC_SystemReset();
+        /* Schedule reset after next uplink completes.
+           This ensures the ACK reaches the server before we reboot,
+           preventing the server from retrying the reset command. */
+        APP_LOG(TS_ON, VLEVEL_M, "RESET command received - Will restart after uplink completes\r\n");
+        pending_reset = 1;
       }
       else
       {
@@ -1259,6 +1264,15 @@ static void OnTxData(LmHandlerTxParams_t *params)
       else
       {
         APP_LOG(TS_OFF, VLEVEL_H, "UNCONFIRMED\r\n");
+      }
+      
+      /* Check for pending reset command - execute after uplink is complete
+         so the server receives the ACK and won't retry the command */
+      if (pending_reset)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Executing pending reset...\r\n");
+        HAL_Delay(100);
+        NVIC_SystemReset();
       }
     }
   }

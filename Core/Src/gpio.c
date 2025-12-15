@@ -88,12 +88,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BUT1_Pin */
-  GPIO_InitStruct.Pin = BUT1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(BUT1_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -103,7 +97,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : Pulsador_Pin */
   GPIO_InitStruct.Pin = Pulsador_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(Pulsador_GPIO_Port, &GPIO_InitStruct);
 

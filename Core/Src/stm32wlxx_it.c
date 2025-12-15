@@ -298,7 +298,6 @@ void EXTI15_10_IRQHandler(void)
 
   /* USER CODE END EXTI15_10_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(Pulsador_Pin);
-  HAL_GPIO_EXTI_IRQHandler(BUT1_Pin);
   /* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
   /* USER CODE END EXTI15_10_IRQn 1 */

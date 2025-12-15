@@ -28,8 +28,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "usart_if.h"
-#include "stm32_timer.h"  // Para el timer del LED
-#include "lora_app.h" // Para LoRaWAN_NotifyMeterDataReady
+#include "stm32_timer.h"
+#include "lora_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -111,39 +111,27 @@ int main(void)
   MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
   MX_USART1_UART_Init();
-  // �? CONFIGURAR WAKEUP PARA USART1
+  
+  // Configurar USART1 para despertar del modo STOP
   UART_WakeUpTypeDef WakeUpSelection;
   WakeUpSelection.WakeUpEvent = UART_WAKEUP_ON_STARTBIT;
   HAL_UARTEx_StopModeWakeUpSourceConfig(&huart1, WakeUpSelection);
-  // Asegurar que UART está listo
+  
   while (__HAL_UART_GET_FLAG(&huart1, USART_ISR_BUSY) == SET);
   while (__HAL_UART_GET_FLAG(&huart1, USART_ISR_REACK) == RESET);
 
-  // Habilitar interrupción de wakeup
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_WUF);
-
-  // Crear timer para LED (1 segundo)
   UTIL_TIMER_Create(&LedTimer, 1000, UTIL_TIMER_ONESHOT, OnLedTimerEvent, NULL);
-  // Habilitar modo STOP
   HAL_UARTEx_EnableStopMode(&huart1);
-  // Registrar tarea UART en el scheduler
   HAL_UART_Transmit(&huart1, (uint8_t*)iniciouart1, strlen(iniciouart1), HAL_MAX_DELAY);
-  // NO iniciar recepción UART aquí - solo cuando se solicite lectura del medidor
-  // HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 while (1)
 {
-  // Procesar datos UART del medidor
   if (uart_rx_complete) {
-    // Procesar ANTES de resetear (ProcessUartData necesita uart_rx_index)
     ProcessUartData();
-    
-    // Ahora sí, resetear flags (ProcessUartData ya lo hace, pero por seguridad)
-    // uart_rx_complete = 0;  // Ya lo hace ProcessUartData
-    // uart_rx_index = 0;      // Ya lo hace ProcessUartData
   }
   
     /* USER CODE END WHILE */
@@ -212,10 +200,7 @@ static void OnLedTimerEvent(void *context)
 }
 
 /**
- * @brief Solicita lectura del medidor (envía comando si es necesario)
- */
-/**
- * @brief Solicita lectura del medidor (envía comando si es necesario)
+ * @brief Solicita lectura del medidor
  */
 void RequestMeterRead(uint8_t attempt)
 {
@@ -223,29 +208,17 @@ void RequestMeterRead(uint8_t attempt)
     snprintf(msg, sizeof(msg), "\r\n[APP] Solicitando lectura del medidor... Intento %u\r\n", attempt);
     HAL_UART_Transmit(&hlpuart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 
-    // Resetear buffer y flags
     uart_rx_index = 0;
     uart_rx_complete = 0;
     meter_data_ready = 0;
-    
-    // Habilitar recepción UART SOLO cuando solicitamos datos
     HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
-
-    // Si tu medidor necesita un comando para responder, envialo aquí:
-    // Ejemplo para IEC 62056-21:
-    // char cmd[] = "/?!\r\n";  // Comando de solicitud
-    // HAL_UART_Transmit(&huart1, (uint8_t*)cmd, strlen(cmd), HAL_MAX_DELAY);
-
-    // Nota: El medidor enviará datos automáticamente
-    // Los datos llegarán por el callback y se procesarán en ProcessUartData()
 }
 
 /**
- * @brief Procesa la trama OBIS recibida
+ * @brief Procesa la trama OBIS recibida del medidor
  */
 static void ProcessUartData(void)
 {
-    // DEBUG: Ver estado del buffer
     char dbg_msg[80];
     snprintf(dbg_msg, sizeof(dbg_msg), "DEBUG ProcessUartData: uart_rx_index=%d uart_rx_complete=%d\r\n", uart_rx_index, uart_rx_complete);
     HAL_UART_Transmit(&huart1, (uint8_t*)dbg_msg, strlen(dbg_msg), HAL_MAX_DELAY);
@@ -257,10 +230,7 @@ static void ProcessUartData(void)
     char footer[] = "\r\n>>> FIN TRAMA <<<\r\n\r\n";
     HAL_UART_Transmit(&huart1, (uint8_t*)footer, strlen(footer), HAL_MAX_DELAY);
 
-    // Marcar que hay datos listos para enviar por LoRaWAN
     LoRaWAN_NotifyMeterDataReady();
-
-    // No es necesario HAL_UART_AbortReceive_IT() - el callback ya detuvo la recepción
     
     uart_rx_complete = 0;
     uart_rx_index = 0;

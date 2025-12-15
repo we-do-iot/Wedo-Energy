@@ -52,6 +52,18 @@
 #define BUTTON_LONG_MAX_MS      5000  /* Max duration for long press (1-5s) */
 #define BUTTON_DOUBLE_WINDOW_MS 500   /* Window for detecting double press */
 
+/* Downlink configuration */
+#define CONFIG_PORT  85
+
+/* Command IDs */
+#define CMD_SET_REPORTING_INTERVAL  0xFF03
+
+/* Command payload sizes */
+#define CMD_0xFF03_SIZE  4  // FF 03 + 2 bytes (LSB, MSB)
+
+/* Configuration magic byte */
+#define CONFIG_MAGIC  0xC5
+
 extern void RequestMeterRead(uint8_t attempt);
 /* USER CODE END Includes */
 
@@ -93,6 +105,16 @@ typedef enum ButtonState_e
   BTN_PRESSED,      /* Button is pressed, waiting to determine type */
   BTN_WAIT_DOUBLE   /* Released, waiting to see if double press */
 } ButtonState_t;
+
+/**
+  * @brief Device configuration structure
+  */
+typedef struct
+{
+  uint32_t reporting_interval_ms;  /* 0 = use APP_TX_DUTYCYCLE */
+  uint8_t config_valid;             /* CONFIG_MAGIC if valid */
+  uint8_t reserved[3];              /* Padding for alignment */
+} DeviceConfig_t;
 
 /* USER CODE END PTD */
 
@@ -263,6 +285,9 @@ static void StartMeterReading(void);
 static void OnButtonShortTimerEvent(void *context);
 static void OnButtonVeryLongTimerEvent(void *context);
 static void OnButtonDoubleTimerEvent(void *context);
+static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size);
+static void SetReportingInterval(uint16_t interval_seconds);
+static void ApplyReportingInterval(void);
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -382,6 +407,13 @@ static uint32_t button_last_interrupt_time = 0;
 static UTIL_TIMER_Object_t ButtonShortTimer;       // 1s timer
 static UTIL_TIMER_Object_t ButtonVeryLongTimer;    // 5s timer  
 static UTIL_TIMER_Object_t ButtonDoubleTimer;      // 500ms timer
+
+/* Device configuration */
+static DeviceConfig_t device_config = {
+  .reporting_interval_ms = 0,  // 0 = use APP_TX_DUTYCYCLE
+  .config_valid = 0,
+  .reserved = {0}
+};
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -660,6 +692,104 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
+
+/**
+  * @brief Process downlink configuration command
+  * @param payload Pointer to command payload
+  * @param size Size of payload in bytes
+  */
+static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
+{
+  if (size < 2) 
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Invalid command size: %d\r\n", size);
+    return;
+  }
+  
+  // Command ID is Big-Endian (FF 03)
+  uint16_t cmd_id = (payload[0] << 8) | payload[1];
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Received command: 0x%04X\r\n", cmd_id);
+  
+  switch (cmd_id)
+  {
+    case CMD_SET_REPORTING_INTERVAL:
+      if (size >= CMD_0xFF03_SIZE)
+      {
+        // Parameter is Little-Endian (LSB first)
+        uint16_t interval_seconds = (payload[3] << 8) | payload[2];
+        APP_LOG(TS_ON, VLEVEL_M, "Set interval: %d seconds\r\n", interval_seconds);
+        SetReportingInterval(interval_seconds);
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF03 size: %d\r\n", size);
+      }
+      break;
+      
+    default:
+      APP_LOG(TS_ON, VLEVEL_M, "Unknown command: 0x%04X\r\n", cmd_id);
+      break;
+  }
+}
+
+/**
+  * @brief Set reporting interval
+  * @param interval_seconds Interval in seconds (0 = use default)
+  */
+static void SetReportingInterval(uint16_t interval_seconds)
+{
+  if (interval_seconds == 0)
+  {
+    // Reset to default
+    device_config.reporting_interval_ms = 0;
+    device_config.config_valid = 0;
+    APP_LOG(TS_ON, VLEVEL_M, "Reset to default interval\r\n");
+  }
+  else
+  {
+    device_config.reporting_interval_ms = (uint32_t)interval_seconds * 1000;
+    device_config.config_valid = CONFIG_MAGIC;
+    APP_LOG(TS_ON, VLEVEL_M, "New interval: %lu ms\r\n", 
+            device_config.reporting_interval_ms);
+  }
+  
+  // Apply immediately
+  ApplyReportingInterval();
+}
+
+/**
+  * @brief Apply reporting interval to TX timer
+  */
+static void ApplyReportingInterval(void)
+{
+  uint32_t interval_ms;
+  
+  if (device_config.config_valid == CONFIG_MAGIC && 
+      device_config.reporting_interval_ms > 0)
+  {
+    interval_ms = device_config.reporting_interval_ms;
+    APP_LOG(TS_ON, VLEVEL_M, "Using configured interval: %lu ms\r\n", interval_ms);
+  }
+  else
+  {
+    interval_ms = APP_TX_DUTYCYCLE;
+    APP_LOG(TS_ON, VLEVEL_M, "Using default interval: %lu ms\r\n", interval_ms);
+  }
+  
+  // Update global periodicity variable
+  TxPeriodicity = interval_ms;
+  
+  // Update and restart timer if it exists
+  if (EventType == TX_ON_TIMER)
+  {
+    UTIL_TIMER_Stop(&TxTimer);
+    UTIL_TIMER_SetPeriod(&TxTimer, interval_ms);
+    UTIL_TIMER_Start(&TxTimer);
+    APP_LOG(TS_ON, VLEVEL_M, "TX Timer restarted with new interval\r\n");
+  }
+}
+
 static void StartMeterReading(void)
 {
   meter_retry_count = 0;
@@ -758,6 +888,15 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
                   APP_LOG(TS_OFF, VLEVEL_H, "LED ON\r\n");
                   // HAL_GPIO_WritePin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin, GPIO_PIN_RESET); /* Disabled - POWER_SENSE is input */
                 }
+              }
+              break;
+
+            case CONFIG_PORT:
+              if (appData->BufferSize > 0)
+              {
+                APP_LOG(TS_ON, VLEVEL_M, "Config downlink on port %d, size: %d\r\n", 
+                        RxPort, appData->BufferSize);
+                ProcessDownlinkCommand(appData->Buffer, appData->BufferSize);
               }
               break;
 

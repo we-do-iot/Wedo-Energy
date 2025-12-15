@@ -46,6 +46,12 @@
 #define METER_READ_TIMEOUT 7000
 #define METER_EXPECTED_BYTES 276
 
+/* Button detection timing constants */
+#define BUTTON_DEBOUNCE_MS      50    /* Debounce to avoid bouncing */
+#define BUTTON_SHORT_MAX_MS     1000  /* Max duration for short press */
+#define BUTTON_LONG_MAX_MS      5000  /* Max duration for long press (1-5s) */
+#define BUTTON_DOUBLE_WINDOW_MS 500   /* Window for detecting double press */
+
 extern void RequestMeterRead(uint8_t attempt);
 /* USER CODE END Includes */
 
@@ -77,6 +83,16 @@ typedef enum TxEventType_e
 } TxEventType_t;
 
 /* USER CODE BEGIN PTD */
+
+/**
+  * @brief Button state machine states
+  */
+typedef enum ButtonState_e
+{
+  BTN_IDLE,         /* Waiting for button press */
+  BTN_PRESSED,      /* Button is pressed, waiting to determine type */
+  BTN_WAIT_DOUBLE   /* Released, waiting to see if double press */
+} ButtonState_t;
 
 /* USER CODE END PTD */
 
@@ -244,6 +260,9 @@ static void OnRxTimerLedEvent(void *context);
 static void OnJoinTimerLedEvent(void *context);
 static void OnMeterTimeoutTimerEvent(void *context);
 static void StartMeterReading(void);
+static void OnButtonShortTimerEvent(void *context);
+static void OnButtonVeryLongTimerEvent(void *context);
+static void OnButtonDoubleTimerEvent(void *context);
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -355,6 +374,14 @@ static UTIL_TIMER_Object_t MeterTimeoutTimer;
 static uint8_t meter_retry_count = 0;
 static char meter_data_buffer[512];  // Buffer local para datos del medidor
 static uint16_t meter_data_length = 0;
+
+/* Button state machine variables */
+static ButtonState_t button_state = BTN_IDLE;
+static uint32_t button_press_time = 0;
+static uint32_t button_last_interrupt_time = 0;
+static UTIL_TIMER_Object_t ButtonShortTimer;       // 1s timer
+static UTIL_TIMER_Object_t ButtonVeryLongTimer;    // 5s timer  
+static UTIL_TIMER_Object_t ButtonDoubleTimer;      // 500ms timer
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -455,6 +482,11 @@ void LoRaWAN_Init(void)
   UTIL_TIMER_Create(&RxLedTimer, LED_PERIOD_TIME, UTIL_TIMER_ONESHOT, OnRxTimerLedEvent, NULL);
   UTIL_TIMER_Create(&JoinLedTimer, LED_PERIOD_TIME, UTIL_TIMER_PERIODIC, OnJoinTimerLedEvent, NULL);
   UTIL_TIMER_Create(&MeterTimeoutTimer, METER_READ_TIMEOUT, UTIL_TIMER_ONESHOT, OnMeterTimeoutTimerEvent, NULL);
+  
+  // Button detection timers
+  UTIL_TIMER_Create(&ButtonShortTimer, BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonShortTimerEvent, NULL);
+  UTIL_TIMER_Create(&ButtonVeryLongTimer, BUTTON_LONG_MAX_MS - BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonVeryLongTimerEvent, NULL);
+  UTIL_TIMER_Create(&ButtonDoubleTimer, BUTTON_DOUBLE_WINDOW_MS, UTIL_TIMER_ONESHOT, OnButtonDoubleTimerEvent, NULL);
 
   /* USER CODE END LoRaWAN_Init_1 */
 
@@ -501,33 +533,127 @@ void LoRaWAN_Init(void)
 
 /* USER CODE BEGIN PB_Callbacks */
 
+/**
+  * @brief Button short press timer callback (1 second)
+  * @param context not used
+  */
+static void OnButtonShortTimerEvent(void *context)
+{
+  // Timer expired = button held for 1 second
+  // Check if still pressed
+  if (HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin) == GPIO_PIN_RESET)
+  {
+    // Still pressed after 1s - this is a long press
+    // Start very long timer (5s total)
+    button_state = BTN_PRESSED;  // Keep state
+    UTIL_TIMER_Start(&ButtonVeryLongTimer);
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación larga detectada (>1s)\r\n");
+  }
+}
+
+/**
+  * @brief Button very long press timer callback (5 seconds)
+  * @param context not used
+  */
+static void OnButtonVeryLongTimerEvent(void *context)
+{
+  // Timer expired = button held for 5 seconds total
+  if (HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin) == GPIO_PIN_RESET)
+  {
+    // Still pressed after 5s = very long press
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación muy larga (>5s) - Reservado\r\n");
+  }
+  button_state = BTN_IDLE;
+}
+
+/**
+  * @brief Button double press window timer callback (500ms)
+  * @param context not used
+  */
+static void OnButtonDoubleTimerEvent(void *context)
+{
+  // Timer expired without second press = it was a single short press
+  if (button_state == BTN_WAIT_DOUBLE)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación corta - Iniciando lectura + envío LoRaWAN\r\n");
+    button_state = BTN_IDLE;
+    
+    // Trigger meter read + LoRaWAN send cycle
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+}
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-char ledpulado[] = "Led pulsado\r\n";
-  switch (GPIO_Pin)
+  if (GPIO_Pin != Pulsador_Pin) return;
+  
+  // Debounce: ignore rapid successive interrupts
+  uint32_t current_time = HAL_GetTick();
+  if (current_time - button_last_interrupt_time < BUTTON_DEBOUNCE_MS) return;
+  button_last_interrupt_time = current_time;
+  
+  // Read pin state to determine if button was pressed or released
+  // With PULLUP: LOW = pressed, HIGH = released
+  GPIO_PinState pin_state = HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin);
+  
+  if (pin_state == GPIO_PIN_RESET)
   {
-    case Pulsador_Pin:
-      // Encender LED
-      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-      HAL_UART_Transmit(&huart1, (uint8_t*)ledpulado, strlen(ledpulado), HAL_MAX_DELAY);
-      // Iniciar timer para apagar después de 1 segundo
-      UTIL_TIMER_Start(&LedTimer);
-
-      // Marcar que se presionó el botón
-      button_pressed = 1;
-      break;
-
-    case BUT1_Pin:
-      // XXX: always initialized
-      if (EventType == TX_ON_EVENT || 1)
-      {
-        UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
-      }
-      break;
-
-    default:
-      break;
+    // ========== BUTTON PRESSED (Falling edge) ==========
+    // LED visual feedback
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    UTIL_TIMER_Start(&LedTimer);
+    
+    if (button_state == BTN_IDLE)
+    {
+      // First press
+      button_press_time = current_time;
+      button_state = BTN_PRESSED;
+      
+      // Start 1-second timer to detect if it becomes a long press
+      UTIL_TIMER_Start(&ButtonShortTimer);
+      
+      APP_LOG(TS_ON, VLEVEL_M, "Pulsador presionado\r\n");
+    }
+    else if (button_state == BTN_WAIT_DOUBLE)
+    {
+      // Second press within double-press window = double press!
+      UTIL_TIMER_Stop(&ButtonDoubleTimer);
+      button_state = BTN_IDLE;
+      APP_LOG(TS_ON, VLEVEL_M, "Doble pulsación detectada - Reservado\r\n");
+    }
   }
+  else
+  {
+    // ========== BUTTON RELEASED (Rising edge) ==========
+    if (button_state == BTN_PRESSED)
+    {
+      // Button was released before timers expired
+      // Stop timers
+      UTIL_TIMER_Stop(&ButtonShortTimer);
+      UTIL_TIMER_Stop(&ButtonVeryLongTimer);
+      
+      // Calculate how long it was pressed
+      uint32_t press_duration = current_time - button_press_time;
+      
+      if (press_duration < BUTTON_SHORT_MAX_MS)
+      {
+        // Less than 1 second = might be short press or start of double
+        // Wait to see if there's a second press
+        button_state = BTN_WAIT_DOUBLE;
+        UTIL_TIMER_Start(&ButtonDoubleTimer);
+        APP_LOG(TS_ON, VLEVEL_M, "Pulsador soltado - Esperando doble pulsación\r\n");
+      }
+      else
+      {
+        // Between 1-5 seconds = long press
+        button_state = BTN_IDLE;
+        APP_LOG(TS_ON, VLEVEL_M, "Pulsación larga (1-5s) - Reservado\r\n");
+      }
+    }
+  }
+  
+  // Legacy button_pressed flag for compatibility
+  button_pressed = 1;
 }
 
 /* USER CODE END PB_Callbacks */

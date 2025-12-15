@@ -57,9 +57,11 @@
 
 /* Command IDs */
 #define CMD_SET_REPORTING_INTERVAL  0xFF03
+#define CMD_RESET                   0xFF10
 
 /* Command payload sizes */
 #define CMD_0xFF03_SIZE  4  // FF 03 + 2 bytes (LSB, MSB)
+#define CMD_0xFF10_SIZE  3  // FF 10 + 1 byte (0xFF)
 
 /* Configuration magic byte */
 #define CONFIG_MAGIC  0xC5
@@ -724,6 +726,19 @@ static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
       else
       {
         APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF03 size: %d\r\n", size);
+      }
+      break;
+      
+    case CMD_RESET:
+      if (size >= CMD_0xFF10_SIZE && payload[2] == 0xFF)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "RESET command received - Restarting device...\r\n");
+        HAL_Delay(100); // Give time for log to be sent
+        NVIC_SystemReset();
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF10 command\r\n");
       }
       break;
       

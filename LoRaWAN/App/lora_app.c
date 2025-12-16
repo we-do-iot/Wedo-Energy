@@ -58,10 +58,15 @@
 /* Command IDs */
 #define CMD_SET_REPORTING_INTERVAL  0xFF03
 #define CMD_RESET                   0xFF10
+#define CMD_FACTORY_RESET_LORAWAN   0xFF99  // Factory reset LoRaWAN NVM
 
 /* Command payload sizes */
 #define CMD_0xFF03_SIZE  4  // FF 03 + 2 bytes (LSB, MSB)
 #define CMD_0xFF10_SIZE  3  // FF 10 + 1 byte (0xFF)
+#define CMD_0xFF99_SIZE  3  // FF 99 FF
+
+/* Max join failures before automatic factory reset */
+#define MAX_JOIN_FAILURES_BEFORE_RESET  32
 
 /* Configuration magic byte */
 #define CONFIG_MAGIC  0xC5
@@ -295,6 +300,7 @@ static void OnButtonDoubleTimerEvent(void *context);
 static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size);
 static void SetReportingInterval(uint16_t interval_seconds);
 static void ApplyReportingInterval(void);
+static void PerformFactoryReset(void);
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -430,6 +436,9 @@ static uint8_t flash_ram_buffer[FLASH_IF_BUFFER_SIZE];
 
 /* Flag to track if we have joined the network in this session */
 static uint8_t is_joined = 0;
+
+/* Join failure counter for automatic factory reset */
+static uint8_t join_failure_count = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -614,8 +623,9 @@ static void OnButtonVeryLongTimerEvent(void *context)
   // Timer expired = button held for 5 seconds total
   if (HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin) == GPIO_PIN_RESET)
   {
-    // Still pressed after 5s = very long press
-    APP_LOG(TS_ON, VLEVEL_M, "Pulsación muy larga (>5s) - Reservado\r\n");
+    // Still pressed after 5s = very long press = Factory Reset
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación muy larga (>5s) - FACTORY RESET\r\n");
+    PerformFactoryReset();
   }
   button_state = BTN_IDLE;
 }
@@ -716,6 +726,28 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 /* USER CODE BEGIN PrFD */
 
 /**
+  * @brief Perform factory reset - erase LoRaWAN NVM and device config
+  * @note This function erases the LoRaWAN session context from Flash,
+  *       resets all downlink configurations, and restarts the device.
+  */
+static void PerformFactoryReset(void)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "FACTORY RESET - Erasing LoRaWAN NVM...\r\n");
+  
+  /* Erase LoRaWAN NVM context (one Flash page = 2KB) */
+  FLASH_IF_Erase(LORAWAN_NVM_BASE_ADDRESS, FLASH_PAGE_SIZE);
+  
+  /* Reset device configuration to defaults */
+  device_config.reporting_interval_ms = 0;
+  device_config.config_valid = 0;
+  SaveDeviceConfig();
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Factory reset complete. Restarting...\r\n");
+  HAL_Delay(100);
+  NVIC_SystemReset();
+}
+
+/**
   * @brief Process downlink configuration command
   * @param payload Pointer to command payload
   * @param size Size of payload in bytes
@@ -761,6 +793,18 @@ static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
       else
       {
         APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF10 command\r\n");
+      }
+      break;
+      
+    case CMD_FACTORY_RESET_LORAWAN:
+      if (size >= CMD_0xFF99_SIZE && payload[2] == 0xFF)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "FACTORY RESET command received (0xFF99FF)\r\n");
+        PerformFactoryReset();
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF99 command\r\n");
       }
       break;
       
@@ -1352,6 +1396,9 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
   {
     if (joinParams->Status == LORAMAC_HANDLER_SUCCESS)
     {
+      /* Reset failure counter on successful join */
+      join_failure_count = 0;
+      
       UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaStoreContextEvent), CFG_SEQ_Prio_0);
 
       UTIL_TIMER_Stop(&JoinLedTimer);
@@ -1381,7 +1428,17 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
     }
     else
     {
-      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED\r\n");
+      /* Increment failure counter */
+      join_failure_count++;
+      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED (%d/%d)\r\n", 
+              join_failure_count, MAX_JOIN_FAILURES_BEFORE_RESET);
+
+      /* Check if we've exceeded max failures */
+      if (join_failure_count >= MAX_JOIN_FAILURES_BEFORE_RESET)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Max join failures reached - FACTORY RESET\r\n");
+        PerformFactoryReset();
+      }
 
       if (joinParams->Mode == ACTIVATION_TYPE_OTAA) {
           APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = RE-TRYING OTAA JOIN\r\n");

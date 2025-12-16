@@ -68,6 +68,10 @@
 /* Max join failures before automatic factory reset */
 #define MAX_JOIN_FAILURES_BEFORE_RESET  32
 
+/* Link Check connectivity detection */
+#define LINK_CHECK_INTERVAL         10  // Send Link Check every N uplinks
+#define MAX_LINK_CHECK_FAILURES      3  // Force rejoin after N consecutive failures
+
 /* Configuration magic byte */
 #define CONFIG_MAGIC  0xC5
 
@@ -439,6 +443,11 @@ static uint8_t is_joined = 0;
 
 /* Join failure counter for automatic factory reset */
 static uint8_t join_failure_count = 0;
+
+/* Link Check connectivity detection */
+static uint8_t uplink_counter_for_link_check = 0;
+static uint8_t link_check_pending = 0;
+static uint8_t link_check_failures = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -1049,6 +1058,15 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
       APP_LOG(TS_OFF, VLEVEL_H, "###### D/L FRAME:%04d | PORT:%d | DR:%d | SLOT:%s | RSSI:%d | SNR:%d\r\n",
               params->DownlinkCounter, RxPort, params->Datarate, slotStrings[params->RxSlot], params->Rssi, params->Snr);
     }
+    
+    /* Link Check response received */
+    if (params->LinkCheck == true)
+    {
+      link_check_pending = 0;
+      link_check_failures = 0;
+      APP_LOG(TS_ON, VLEVEL_M, "Link Check OK: Margin=%d, Gateways=%d\r\n", 
+              params->DemodMargin, params->NbGateways);
+    }
   }
   /* USER CODE END OnRxData_1 */
 }
@@ -1293,6 +1311,16 @@ static void SendTxData(void)
     UTIL_TIMER_Stop(&JoinLedTimer);
   }
 
+  /* Link Check connectivity detection: send request every N uplinks */
+  uplink_counter_for_link_check++;
+  if (uplink_counter_for_link_check >= LINK_CHECK_INTERVAL)
+  {
+    uplink_counter_for_link_check = 0;
+    link_check_pending = 1;
+    LmHandlerLinkCheckReq();
+    APP_LOG(TS_ON, VLEVEL_M, "Link Check requested\r\n");
+  }
+
   status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false);
   if (LORAMAC_HANDLER_SUCCESS == status)
   {
@@ -1389,6 +1417,24 @@ static void OnTxData(LmHandlerTxParams_t *params)
         HAL_Delay(100);
         NVIC_SystemReset();
       }
+      
+      /* Link Check failure detection */
+      if (link_check_pending)
+      {
+        /* No Link Check response received - increment failures */
+        link_check_pending = 0;
+        link_check_failures++;
+        APP_LOG(TS_ON, VLEVEL_M, "Link Check FAILED (%d/%d)\r\n", 
+                link_check_failures, MAX_LINK_CHECK_FAILURES);
+        
+        if (link_check_failures >= MAX_LINK_CHECK_FAILURES)
+        {
+          APP_LOG(TS_ON, VLEVEL_M, "Max Link Check failures - forcing rejoin\r\n");
+          link_check_failures = 0;
+          uplink_counter_for_link_check = 0;
+          LmHandlerJoin(ActivationType, true);  // Force rejoin
+        }
+      }
     }
   }
   /* USER CODE END OnTxData_1 */
@@ -1403,6 +1449,11 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
     {
       /* Reset failure counter on successful join */
       join_failure_count = 0;
+      
+      /* Reset Link Check counters on successful join */
+      link_check_failures = 0;
+      link_check_pending = 0;
+      uplink_counter_for_link_check = 0;
       
       UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaStoreContextEvent), CFG_SEQ_Prio_0);
 

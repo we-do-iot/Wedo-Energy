@@ -579,8 +579,9 @@ void LoRaWAN_Init(void)
 
   if (EventType == TX_ON_TIMER)
   {
-    /* Create timer but don't start - will start after successful JOIN */
+    /* send every time timer elapses */
     UTIL_TIMER_Create(&TxTimer, TxPeriodicity, UTIL_TIMER_ONESHOT, OnTxTimerEvent, NULL);
+    UTIL_TIMER_Start(&TxTimer);
   }
   else
   {
@@ -590,7 +591,11 @@ void LoRaWAN_Init(void)
   }
 
   /* USER CODE BEGIN LoRaWAN_Init_Last */
-
+  /* Stop timer that CubeMX starts - we'll start it after successful JOIN */
+  if (EventType == TX_ON_TIMER)
+  {
+    UTIL_TIMER_Stop(&TxTimer);
+  }
   /* USER CODE END LoRaWAN_Init_Last */
 }
 

@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
+#include "stm32_systime.h" // Para SysTimeGet() - timestamp sincronizado
 #include "obis_helpers.h"
 
 #define METER_MAX_RETRIES 5
@@ -448,6 +449,9 @@ static uint8_t join_failure_count = 0;
 static uint8_t uplink_counter_for_link_check = 0;
 static uint8_t link_check_pending = 0;
 static uint8_t link_check_failures = 0;
+
+/* Range test pending flag - set by double-press, cleared after sending */
+static volatile uint8_t range_test_pending = 0;
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -694,10 +698,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
     else if (button_state == BTN_WAIT_DOUBLE)
     {
-      // Second press within double-press window = double press!
+      // Second press within double-press window = double press = RANGE TEST!
       UTIL_TIMER_Stop(&ButtonDoubleTimer);
       button_state = BTN_IDLE;
-      APP_LOG(TS_ON, VLEVEL_M, "Doble pulsación detectada - Reservado\r\n");
+      APP_LOG(TS_ON, VLEVEL_M, "Doble pulsación detectada - Test de alcance LoRaWAN\r\n");
+      range_test_pending = 1;
+      UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
     }
   }
   else
@@ -1091,6 +1097,52 @@ static void SendTxData(void)
   // Hay un caso borde: El timer de LoRaWAN dispara SendTxData.
   // Nosotros interceptamos aqui.
   
+  /* ===== RANGE TEST: Si hay test pendiente, enviar inmediatamente sin leer medidor ===== */
+  /* Save original config BEFORE any modifications (for restoration after range test) */
+  static bool saved_adr_state;
+  static int8_t saved_datarate;
+  static LmHandlerMsgTypes_t saved_confirmed;
+  
+  if (range_test_pending)
+  {
+    // Save original config BEFORE modifying anything
+    saved_adr_state = LmHandlerParams.AdrEnable;
+    saved_datarate = LmHandlerParams.TxDatarate;
+    saved_confirmed = LmHandlerParams.IsTxConfirmed;
+    
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Construyendo mensaje de prueba...\r\n");
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Config guardada (ADR=%s, DR=%d, Confirmed=%s)\r\n",
+            saved_adr_state ? "ON" : "OFF", saved_datarate,
+            saved_confirmed == LORAMAC_HANDLER_CONFIRMED_MSG ? "YES" : "NO");
+    
+    // Obtener timestamp sincronizado
+    SysTime_t sysTime = SysTimeGet();
+    uint32_t timestamp = sysTime.Seconds;
+    
+    // Construir payload: 0xFF + timestamp (4 bytes big-endian)
+    AppData.Buffer[0] = 0xFF;
+    AppData.Buffer[1] = (timestamp >> 24) & 0xFF;
+    AppData.Buffer[2] = (timestamp >> 16) & 0xFF;
+    AppData.Buffer[3] = (timestamp >> 8) & 0xFF;
+    AppData.Buffer[4] = timestamp & 0xFF;
+    AppData.BufferSize = 5;
+    AppData.Port = LORAWAN_USER_APP_PORT;
+    
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test payload: FF %02X %02X %02X %02X (timestamp=%u)\r\n",
+            AppData.Buffer[1], AppData.Buffer[2], AppData.Buffer[3], AppData.Buffer[4],
+            (unsigned int)timestamp);
+    
+    // Activar modo confirmado (ACK)
+    LmHandlerParams.IsTxConfirmed = LORAMAC_HANDLER_CONFIRMED_MSG;
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Modo confirmado activado (ACK)\r\n");
+    
+    // Limpiar flag
+    range_test_pending = 0;
+    
+    // Saltar la lectura del medidor
+    goto skip_meter_reading;
+  }
+  
   if (meter_retry_count == 0) {
       APP_LOG(TS_ON, VLEVEL_M, "Ciclo LoRaWAN: Iniciando lectura de medidor...\r\n");
       StartMeterReading();
@@ -1311,6 +1363,7 @@ static void SendTxData(void)
     UTIL_TIMER_Stop(&JoinLedTimer);
   }
 
+skip_meter_reading:
   /* Link Check connectivity detection: send request every N uplinks */
   uplink_counter_for_link_check++;
   if (uplink_counter_for_link_check >= LINK_CHECK_INTERVAL)
@@ -1319,6 +1372,33 @@ static void SendTxData(void)
     link_check_pending = 1;
     LmHandlerLinkCheckReq();
     APP_LOG(TS_ON, VLEVEL_M, "Link Check requested\r\n");
+  }
+
+  /* Force DR3 for range test (must be right before send to avoid being overridden)
+   * DR3 allows 53 bytes with Dwell Time enabled - sufficient for our 42-byte meter payload */
+  bool is_range_test = (AppData.BufferSize == 5 && AppData.Buffer[0] == 0xFF);
+  
+  if (is_range_test)
+  {
+    // Disable ADR at MAC layer
+    LmHandlerErrorStatus_t adr_status = LmHandlerSetAdrEnable(false);
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: ADR deshabilitado (era %s): %s\r\n", 
+            saved_adr_state ? "ON" : "OFF",
+            adr_status == LORAMAC_HANDLER_SUCCESS ? "OK" : "ERROR");
+    
+    // Force DR3 (minimum for 42+ bytes with Dwell Time)
+    LmHandlerErrorStatus_t dr_status = LmHandlerSetTxDatarate(DR_3);
+    if (dr_status == LORAMAC_HANDLER_SUCCESS)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Range Test: DR3 configurado OK\r\n");
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Range Test: ERROR DR3 (status=%d)\r\n", dr_status);
+    }
+    
+    // Force confirmed message for range test (already set in range test block, but ensure it's set)
+    LmHandlerParams.IsTxConfirmed = LORAMAC_HANDLER_CONFIRMED_MSG;
   }
 
   status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false);
@@ -1333,6 +1413,17 @@ static void SendTxData(void)
     {
       APP_LOG(TS_ON, VLEVEL_L, "Next Tx in  : ~%d second(s)\r\n", (nextTxIn / 1000));
     }
+  }
+
+  /* Restore ADR, DR and confirmed state after range test */
+  if (is_range_test)
+  {
+    LmHandlerSetAdrEnable(saved_adr_state);
+    LmHandlerSetTxDatarate(saved_datarate);
+    LmHandlerParams.IsTxConfirmed = saved_confirmed;
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Config restaurada (ADR=%s, DR=%d, Confirmed=%s)\r\n",
+            saved_adr_state ? "ON" : "OFF", saved_datarate,
+            saved_confirmed == LORAMAC_HANDLER_CONFIRMED_MSG ? "YES" : "NO");
   }
 
   if (EventType == TX_ON_TIMER)

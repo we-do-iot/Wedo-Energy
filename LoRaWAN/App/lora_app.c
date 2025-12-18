@@ -667,6 +667,24 @@ static void OnButtonDoubleTimerEvent(void *context)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+  /* ========== POWER_SENSE: Network state changed ========== */
+  if (GPIO_Pin == POWER_SENSE_Pin)
+  {
+    static uint32_t last_power_sense_time = 0;
+    uint32_t now = HAL_GetTick();
+    
+    // Debounce: ignore rapid changes (100ms)
+    if (now - last_power_sense_time < 100) return;
+    last_power_sense_time = now;
+    
+    uint8_t state = HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin);
+    APP_LOG(TS_ON, VLEVEL_M, "Network state changed to %d! Triggering read...\r\n", state);
+    
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    return;
+  }
+  
+  /* ========== PULSADOR: Button handling ========== */
   if (GPIO_Pin != Pulsador_Pin) return;
   
   // Debounce: ignore rapid successive interrupts

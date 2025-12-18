@@ -72,6 +72,7 @@ void RequestMeterRead(uint8_t attempt);
 #define USARTx_RX_GPIO_Port GPIOB
 #define POWER_SENSE_Pin GPIO_PIN_5
 #define POWER_SENSE_GPIO_Port GPIOB
+#define POWER_SENSE_EXTI_IRQn EXTI9_5_IRQn
 #define DBG1_Pin GPIO_PIN_0
 #define DBG1_GPIO_Port GPIOA
 #define USARTx_TX_Pin GPIO_PIN_6

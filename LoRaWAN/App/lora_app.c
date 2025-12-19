@@ -43,7 +43,7 @@
 #include "stm32_systime.h" // Para SysTimeGet() - timestamp sincronizado
 #include "obis_helpers.h"
 
-#define METER_MAX_RETRIES 5
+#define METER_MAX_RETRIES 8
 #define METER_READ_TIMEOUT 7000
 #define METER_EXPECTED_BYTES 276
 
@@ -51,7 +51,7 @@
 #define BUTTON_DEBOUNCE_MS      50    /* Debounce to avoid bouncing */
 #define BUTTON_SHORT_MAX_MS     1000  /* Max duration for short press */
 #define BUTTON_LONG_MAX_MS      5000  /* Max duration for long press (1-5s) */
-#define BUTTON_DOUBLE_WINDOW_MS 500   /* Window for detecting double press */
+#define BUTTON_DOUBLE_WINDOW_MS 650   /* Window for detecting double press */
 
 /* Downlink configuration */
 #define CONFIG_PORT  85
@@ -71,7 +71,7 @@
 
 /* Link Check connectivity detection */
 #define LINK_CHECK_INTERVAL         10  // Send Link Check every N uplinks
-#define MAX_LINK_CHECK_FAILURES      3  // Force rejoin after N consecutive failures
+#define MAX_LINK_CHECK_FAILURES      5  // Force rejoin after N consecutive failures
 
 /* Configuration magic byte */
 #define CONFIG_MAGIC  0xC5

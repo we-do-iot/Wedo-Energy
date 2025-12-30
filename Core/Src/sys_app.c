@@ -155,7 +155,7 @@ uint8_t GetBatteryLevel(void)
   uint16_t batteryLevelmV;
 
   /* USER CODE BEGIN GetBatteryLevel_0 */
-
+  uint8_t pct = 0;
   /* USER CODE END GetBatteryLevel_0 */
 
   batteryLevelmV = (uint16_t) SYS_GetBatteryLevel();
@@ -175,6 +175,59 @@ uint8_t GetBatteryLevel(void)
   }
 
   /* USER CODE BEGIN GetBatteryLevel_2 */
+
+  /* Map battery mV to a percentage using a piecewise-linear Li-ion curve (typical) */
+  {
+    const uint16_t volts[] = {3000, 3200, 3400, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
+    const uint8_t  pc[]    = {   0,    5,   20,   50,   65,   75,   85,   93,   98,  100};
+    const int points = sizeof(volts) / sizeof(volts[0]);
+    int i;
+
+    if (batteryLevelmV <= volts[0])
+    {
+      pct = pc[0];
+    }
+    else if (batteryLevelmV >= volts[points - 1])
+    {
+      pct = pc[points - 1];
+    }
+    else
+    {
+      for (i = 0; i < points - 1; i++)
+      {
+        if ((batteryLevelmV >= volts[i]) && (batteryLevelmV < volts[i + 1]))
+        {
+          uint32_t dv = volts[i + 1] - volts[i];
+          uint32_t dp = pc[i + 1] - pc[i];
+          uint32_t offset = batteryLevelmV - volts[i];
+          pct = (uint8_t)(pc[i] + ((offset * dp) / dv));
+          break;
+        }
+      }
+    }
+  }
+
+  /* Convert percentage (0..100) into LoRa battery scale (1..254) */
+  if (pct == 0)
+  {
+    batteryLevel = 1; /* very low */
+  }
+  else
+  {
+    uint32_t level = ((uint32_t)pct * (uint32_t)LORAWAN_MAX_BAT) / 100U;
+    if (level == 0)
+    {
+      level = 1;
+    }
+    if (level > LORAWAN_MAX_BAT)
+    {
+      level = LORAWAN_MAX_BAT;
+    }
+    batteryLevel = (uint8_t)level;
+  }
+
+  /* Debug: show mapping from mV -> pct -> LoRa-scale for troubleshooting */
+  APP_LOG(TS_ON, VLEVEL_M, "DEBUG: GetBatteryLevel: batt_mV=%u pct=%u lora=%u\r\n", batteryLevelmV, pct, batteryLevel);
 
   /* USER CODE END GetBatteryLevel_2 */
 
@@ -235,24 +288,21 @@ void GetUniqueId(uint8_t *id)
   /* USER CODE END GetUniqueId_2 */
 }
 
-uint32_t GetDevAddr(void)
+void GetDevAddr(uint32_t *devAddr)
 {
-  uint32_t val = 0;
   /* USER CODE BEGIN GetDevAddr_1 */
 
   /* USER CODE END GetDevAddr_1 */
 
-  val = LL_FLASH_GetUDN();
-  if (val == 0xFFFFFFFF)
+  *devAddr = LL_FLASH_GetUDN();
+  if (*devAddr == 0xFFFFFFFF)
   {
-    val = ((HAL_GetUIDw0()) ^ (HAL_GetUIDw1()) ^ (HAL_GetUIDw2()));
+    *devAddr = ((HAL_GetUIDw0()) ^ (HAL_GetUIDw1()) ^ (HAL_GetUIDw2()));
   }
 
   /* USER CODE BEGIN GetDevAddr_2 */
 
   /* USER CODE END GetDevAddr_2 */
-  return val;
-
 }
 
 /* USER CODE BEGIN EF */

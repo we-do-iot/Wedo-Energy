@@ -19,11 +19,17 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "app_lorawan.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+#include "usart_if.h"
+#include "stm32_timer.h"
+#include "lora_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +39,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -43,12 +50,26 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+char iniciouart1[] = "UART1 Habilitada\r\n";
+volatile uint8_t meter_data_ready = 0; // Flag para indicar datos listos
+uint32_t counter = 0;
+char counter_msg[50];
+volatile uint8_t button_pressed = 0;
+UTIL_TIMER_Object_t LedTimer;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+int __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
+static void ProcessUartData(void);
+static void OnLedTimerEvent(void *context);  // Callback del timer
+
+void RequestMeterRead(uint8_t attempt);          // Solicitar lectura
 
 /* USER CODE END PFP */
 
@@ -63,6 +84,7 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -86,19 +108,37 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_LoRaWAN_Init();
+  MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  MX_USART1_UART_Init();
+  
+  // Configurar USART1 para despertar del modo STOP
+  UART_WakeUpTypeDef WakeUpSelection;
+  WakeUpSelection.WakeUpEvent = UART_WAKEUP_ON_STARTBIT;
+  HAL_UARTEx_StopModeWakeUpSourceConfig(&huart1, WakeUpSelection);
+  
+  while (__HAL_UART_GET_FLAG(&huart1, USART_ISR_BUSY) == SET);
+  while (__HAL_UART_GET_FLAG(&huart1, USART_ISR_REACK) == RESET);
 
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_WUF);
+  UTIL_TIMER_Create(&LedTimer, 1000, UTIL_TIMER_ONESHOT, OnLedTimerEvent, NULL);
+  HAL_UARTEx_EnableStopMode(&huart1);
+  HAL_UART_Transmit(&huart1, (uint8_t*)iniciouart1, strlen(iniciouart1), HAL_MAX_DELAY);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+while (1)
+{
+  if (uart_rx_complete) {
+    ProcessUartData();
+  }
+  
     /* USER CODE END WHILE */
     MX_LoRaWAN_Process();
 
     /* USER CODE BEGIN 3 */
-  }
+}
   /* USER CODE END 3 */
 }
 
@@ -151,7 +191,50 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+ * @brief Callback del timer del LED - apaga el LED después de 1 segundo
+ */
+static void OnLedTimerEvent(void *context)
+{
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+}
 
+/**
+ * @brief Solicita lectura del medidor
+ */
+void RequestMeterRead(uint8_t attempt)
+{
+    char msg[64];
+    snprintf(msg, sizeof(msg), "\r\n[APP] Solicitando lectura del medidor... Intento %u\r\n", attempt);
+    HAL_UART_Transmit(&hlpuart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    uart_rx_index = 0;
+    uart_rx_complete = 0;
+    meter_data_ready = 0;
+    HAL_UART_Receive_IT(&huart1, (uint8_t*)&uart_rx_char, 1);
+}
+
+/**
+ * @brief Procesa la trama OBIS recibida del medidor
+ */
+static void ProcessUartData(void)
+{
+    char dbg_msg[80];
+    snprintf(dbg_msg, sizeof(dbg_msg), "DEBUG ProcessUartData: uart_rx_index=%d uart_rx_complete=%d\r\n", uart_rx_index, uart_rx_complete);
+    HAL_UART_Transmit(&huart1, (uint8_t*)dbg_msg, strlen(dbg_msg), HAL_MAX_DELAY);
+    
+    char header[] = "\r\n>>> TRAMA COMPLETA <<<\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)header, strlen(header), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t*)uart_rx_buffer, uart_rx_index, HAL_MAX_DELAY);
+
+    char footer[] = "\r\n>>> FIN TRAMA <<<\r\n\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)footer, strlen(footer), HAL_MAX_DELAY);
+
+    LoRaWAN_NotifyMeterDataReady();
+    
+    uart_rx_complete = 0;
+    uart_rx_index = 0;
+}
 /* USER CODE END 4 */
 
 /**
@@ -168,8 +251,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

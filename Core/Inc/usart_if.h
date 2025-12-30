@@ -47,6 +47,14 @@ extern "C" {
 
 /* External variables --------------------------------------------------------*/
 /* USER CODE BEGIN EV */
+#define UART_BUFFER_SIZE 512
+extern char  uart_rx_char;
+extern char  uart_rx_buffer[UART_BUFFER_SIZE];
+extern volatile uint16_t uart_rx_index;
+extern volatile uint8_t uart_rx_complete;
+extern volatile uint8_t meter_data_ready;
+extern UART_HandleTypeDef huart1;
+
 
 /* USER CODE END EV */
 

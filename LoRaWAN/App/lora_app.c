@@ -25,24 +25,63 @@
 #include "stm32_seq.h"
 #include "stm32_timer.h"
 #include "utilities_def.h"
-#include "lora_app_version.h"
+#include "app_version.h"
 #include "lorawan_version.h"
 #include "subghz_phy_version.h"
 #include "lora_info.h"
 #include "LmHandler.h"
-#include "stm32_lpm.h"
 #include "adc_if.h"
 #include "CayenneLpp.h"
 #include "sys_sensors.h"
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
+#include "usart_if.h"
+#include <stdlib.h>
+#include <string.h>
+#include "stm32_timer.h"  // Necesario para UTIL_TIMER_Object_t
+#include "stm32_systime.h" // Para SysTimeGet() - timestamp sincronizado
+#include "obis_helpers.h"
 
+#define METER_MAX_RETRIES 8
+#define METER_READ_TIMEOUT 7000
+#define METER_EXPECTED_BYTES 276
+
+/* Button detection timing constants */
+#define BUTTON_DEBOUNCE_MS      50    /* Debounce to avoid bouncing */
+#define BUTTON_SHORT_MAX_MS     1000  /* Max duration for short press */
+#define BUTTON_LONG_MAX_MS      5000  /* Max duration for long press (1-5s) */
+#define BUTTON_DOUBLE_WINDOW_MS 650   /* Window for detecting double press */
+
+/* Downlink configuration */
+#define CONFIG_PORT  85
+
+/* Command IDs */
+#define CMD_SET_REPORTING_INTERVAL  0xFF03
+#define CMD_RESET                   0xFF10
+#define CMD_FACTORY_RESET_LORAWAN   0xFF99  // Factory reset LoRaWAN NVM
+
+/* Command payload sizes */
+#define CMD_0xFF03_SIZE  4  // FF 03 + 2 bytes (LSB, MSB)
+#define CMD_0xFF10_SIZE  3  // FF 10 + 1 byte (0xFF)
+#define CMD_0xFF99_SIZE  3  // FF 99 FF
+
+/* Link Check connectivity detection */
+#define LINK_CHECK_INTERVAL         10  // Send Link Check every N uplinks
+#define MAX_LINK_CHECK_FAILURES      5  // Force rejoin after N consecutive failures
+
+/* Configuration magic byte */
+#define CONFIG_MAGIC  0xC5
+
+extern void RequestMeterRead(uint8_t attempt);
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
-
+extern volatile uint8_t meter_data_ready;
+extern volatile uint8_t button_pressed;
+extern UTIL_TIMER_Object_t LedTimer;
+extern char uart_rx_buffer[];
 /* USER CODE END EV */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,6 +105,26 @@ typedef enum TxEventType_e
 
 /* USER CODE BEGIN PTD */
 
+/**
+  * @brief Button state machine states
+  */
+typedef enum ButtonState_e
+{
+  BTN_IDLE,         /* Waiting for button press */
+  BTN_PRESSED,      /* Button is pressed, waiting to determine type */
+  BTN_WAIT_DOUBLE   /* Released, waiting to see if double press */
+} ButtonState_t;
+
+/**
+  * @brief Device configuration structure
+  */
+typedef struct
+{
+  uint32_t reporting_interval_ms;  /* 0 = use APP_TX_DUTYCYCLE */
+  uint8_t config_valid;             /* CONFIG_MAGIC if valid */
+  uint8_t reserved[3];              /* Padding for alignment */
+} DeviceConfig_t;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -86,10 +145,24 @@ typedef enum TxEventType_e
   * @brief LoRaWAN NVM Flash address
   * @note last 2 sector of a 128kBytes device
   */
-#define LORAWAN_NVM_BASE_ADDRESS                    ((uint32_t)0x0803F000UL)
+#define LORAWAN_NVM_BASE_ADDRESS                    ((void *)0x0803F000UL)
 
 /* USER CODE BEGIN PD */
-static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
+#ifndef LORAWAN_NVM_BASE_ADDRESS
+/* Default NVM base address fallback (tune to your board's flash map if needed) */
+#define LORAWAN_NVM_BASE_ADDRESS ((void *)0x080E0000)
+#endif
+
+/* Device config Flash address - use a separate page from LoRaWAN NVM */
+#define DEVICE_CONFIG_FLASH_ADDRESS ((void *)0x0803E000UL)
+
+#ifndef LED_PERIOD_TIME
+#define LED_PERIOD_TIME 200U
+#endif
+
+#ifndef JOIN_TIME
+#define JOIN_TIME 600000U
+#endif
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -134,6 +207,11 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params);
   * @param params status of Last Beacon
   */
 static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params);
+
+/**
+  * @brief callback when system time has been updated
+  */
+static void OnSysTimeUpdate(void);
 
 /**
   * @brief callback when LoRaWAN application Class is changed
@@ -211,25 +289,23 @@ static void OnPingSlotPeriodicityChanged(uint8_t pingSlotPeriodicity);
 static void OnSystemReset(void);
 
 /* USER CODE BEGIN PFP */
-
-/**
-  * @brief  LED Tx timer callback function
-  * @param  context ptr of LED context
-  */
 static void OnTxTimerLedEvent(void *context);
-
-/**
-  * @brief  LED Rx timer callback function
-  * @param  context ptr of LED context
-  */
 static void OnRxTimerLedEvent(void *context);
-
-/**
-  * @brief  LED Join timer callback function
-  * @param  context ptr of LED context
-  */
 static void OnJoinTimerLedEvent(void *context);
-
+static void OnMeterTimeoutTimerEvent(void *context);
+static void StartMeterReading(void);
+static void SaveDeviceConfig(void);
+static void LoadDeviceConfig(void);
+static void OnButtonShortTimerEvent(void *context);
+static void OnButtonVeryLongTimerEvent(void *context);
+static void OnButtonDoubleTimerEvent(void *context);
+static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size);
+static void SetReportingInterval(uint16_t interval_seconds);
+static void ApplyReportingInterval(void);
+static void PerformFactoryReset(void);
+static void RequestTimeSync(void);
+static void OnTimeSyncTimerEvent(void *context);
+static void CheckPeriodicTimeSync(void);
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -260,6 +336,7 @@ static LmHandlerCallbacks_t LmHandlerCallbacks =
   .OnTxData =                     OnTxData,
   .OnRxData =                     OnRxData,
   .OnBeaconStatusChange =         OnBeaconStatusChange,
+  .OnSysTimeUpdate =              OnSysTimeUpdate,
   .OnClassChange =                OnClassChange,
   .OnTxPeriodicityChanged =       OnTxPeriodicityChanged,
   .OnTxFrameCtrlChanged =         OnTxFrameCtrlChanged,
@@ -277,6 +354,7 @@ static LmHandlerParams_t LmHandlerParams =
   .AdrEnable =                LORAWAN_ADR_STATE,
   .IsTxConfirmed =            LORAWAN_DEFAULT_CONFIRMED_MSG_STATE,
   .TxDatarate =               LORAWAN_DEFAULT_DATA_RATE,
+  .TxPower =                  LORAWAN_DEFAULT_TX_POWER,
   .PingSlotPeriodicity =      LORAWAN_DEFAULT_PING_SLOT_PERIODICITY,
   .RxBCTimeout =              LORAWAN_DEFAULT_CLASS_B_C_RESP_TIMEOUT
 };
@@ -332,11 +410,107 @@ static UTIL_TIMER_Object_t RxLedTimer;
   */
 static UTIL_TIMER_Object_t JoinLedTimer;
 
+/* Human-readable RX slot strings used in debug logs */
+static const char *slotStrings[] = { "NONE", "RX1", "RX2", "C", "P", "MULTI" };
+
+static UTIL_TIMER_Object_t MeterTimeoutTimer;
+static uint8_t meter_retry_count = 0;
+static char meter_data_buffer[512];  // Buffer local para datos del medidor
+static uint16_t meter_data_length = 0;
+
+/* Button state machine variables */
+static ButtonState_t button_state = BTN_IDLE;
+static uint32_t button_press_time = 0;
+static uint32_t button_last_interrupt_time = 0;
+static UTIL_TIMER_Object_t ButtonShortTimer;       // 1s timer
+static UTIL_TIMER_Object_t ButtonVeryLongTimer;    // 5s timer  
+static UTIL_TIMER_Object_t ButtonDoubleTimer;      // 500ms timer
+
+/* Device configuration */
+static DeviceConfig_t device_config = {
+  .reporting_interval_ms = 0,  // 0 = use APP_TX_DUTYCYCLE
+  .config_valid = 0,
+  .reserved = {0}
+};
+
+/* Pending reset flag: set when reset command is received, executed after next uplink */
+static volatile uint8_t pending_reset = 0;
+
+/* Flash RAM buffer for page backup during write operations (2KB = FLASH_PAGE_SIZE) */
+static uint8_t flash_ram_buffer[FLASH_IF_BUFFER_SIZE];
+
+/* Flag to track if we have joined the network in this session */
+static uint8_t is_joined = 0;
+
+/* Join failure counter for log display */
+static uint32_t join_failure_count = 0;
+
+/* Link Check connectivity detection */
+static uint8_t uplink_counter_for_link_check = 0;
+static uint8_t link_check_pending = 0;
+static uint8_t link_check_failures = 0;
+
+/* Range test pending flag - set by double-press, cleared after sending */
+static volatile uint8_t range_test_pending = 0;
+
+/* Time sync configuration */
+#define TIME_SYNC_DELAY_MS      2000        /* Delay after join to request time sync */
+#define TIME_SYNC_INTERVAL_S    (24*60*60)  /* Request time sync every 24 hours */
+static UTIL_TIMER_Object_t TimeSyncTimer;
+static uint32_t last_time_sync_timestamp = 0;  /* Last successful sync timestamp (seconds since boot) */
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
-
+void LoRaWAN_NotifyMeterDataReady(void)
+{
+  if (meter_retry_count > 0)
+  {
+    UTIL_TIMER_Stop(&MeterTimeoutTimer);
+    
+    // Validar que sean exactamente 276 bytes
+    if (uart_rx_index != METER_EXPECTED_BYTES)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "ERROR: Datos incorrectos (%d bytes, esperados %d). Reintentando...\r\n", uart_rx_index, METER_EXPECTED_BYTES);
+      
+      // Reintentar si no hemos agotado los intentos
+      if (meter_retry_count < METER_MAX_RETRIES)
+      {
+        meter_retry_count++;
+        RequestMeterRead(meter_retry_count);
+        UTIL_TIMER_Start(&MeterTimeoutTimer);
+      }
+      else
+      {
+        // Agoté reintentos con datos incorrectos
+        APP_LOG(TS_ON, VLEVEL_M, "Maximos reintentos alcanzados con datos incorrectos.\r\n");
+        HAL_UART_AbortReceive_IT(&huart1);
+        meter_data_ready = 0;
+        UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+      }
+      return;
+    }
+    
+    // Copiar datos del buffer UART al buffer local antes de que se borren
+    if (uart_rx_index < sizeof(meter_data_buffer))
+    {
+      memcpy(meter_data_buffer, uart_rx_buffer, uart_rx_index);
+      meter_data_buffer[uart_rx_index] = '\0';  // Asegurar terminación
+      meter_data_length = uart_rx_index;
+      meter_data_ready = 1;
+      APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos (%d bytes). Iniciando envio LoRaWAN.\r\n", meter_data_length);
+      UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "ERROR: Datos del medidor demasiado grandes (%d bytes)\r\n", uart_rx_index);
+    }
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Datos de medidor recibidos inesperadamente (ignorado).\r\n");
+  }
+}
 /* USER CODE END EF */
 
 void LoRaWAN_Init(void)
@@ -383,6 +557,15 @@ void LoRaWAN_Init(void)
   UTIL_TIMER_Create(&TxLedTimer, LED_PERIOD_TIME, UTIL_TIMER_ONESHOT, OnTxTimerLedEvent, NULL);
   UTIL_TIMER_Create(&RxLedTimer, LED_PERIOD_TIME, UTIL_TIMER_ONESHOT, OnRxTimerLedEvent, NULL);
   UTIL_TIMER_Create(&JoinLedTimer, LED_PERIOD_TIME, UTIL_TIMER_PERIODIC, OnJoinTimerLedEvent, NULL);
+  UTIL_TIMER_Create(&MeterTimeoutTimer, METER_READ_TIMEOUT, UTIL_TIMER_ONESHOT, OnMeterTimeoutTimerEvent, NULL);
+  
+  // Button detection timers
+  UTIL_TIMER_Create(&ButtonShortTimer, BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonShortTimerEvent, NULL);
+  UTIL_TIMER_Create(&ButtonVeryLongTimer, BUTTON_LONG_MAX_MS - BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonVeryLongTimerEvent, NULL);
+  UTIL_TIMER_Create(&ButtonDoubleTimer, BUTTON_DOUBLE_WINDOW_MS, UTIL_TIMER_ONESHOT, OnButtonDoubleTimerEvent, NULL);
+  
+  // Time sync timer (delay after join to sync clock)
+  UTIL_TIMER_Create(&TimeSyncTimer, TIME_SYNC_DELAY_MS, UTIL_TIMER_ONESHOT, OnTimeSyncTimerEvent, NULL);
 
   /* USER CODE END LoRaWAN_Init_1 */
 
@@ -404,6 +587,13 @@ void LoRaWAN_Init(void)
 
   /* USER CODE BEGIN LoRaWAN_Init_2 */
   UTIL_TIMER_Start(&JoinLedTimer);
+  
+  /* Initialize Flash interface with RAM buffer for page backup */
+  FLASH_IF_Init(flash_ram_buffer);
+  
+  /* Load device configuration from Flash and apply saved reporting interval */
+  LoadDeviceConfig();
+  ApplyReportingInterval();
 
   /* USER CODE END LoRaWAN_Init_2 */
 
@@ -423,26 +613,158 @@ void LoRaWAN_Init(void)
   }
 
   /* USER CODE BEGIN LoRaWAN_Init_Last */
-
+  /* Stop timer that CubeMX starts - we'll start it after successful JOIN */
+  if (EventType == TX_ON_TIMER)
+  {
+    UTIL_TIMER_Stop(&TxTimer);
+  }
   /* USER CODE END LoRaWAN_Init_Last */
 }
 
 /* USER CODE BEGIN PB_Callbacks */
 
+/**
+  * @brief Button short press timer callback (1 second)
+  * @param context not used
+  */
+static void OnButtonShortTimerEvent(void *context)
+{
+  // Timer expired = button held for 1 second
+  // Check if still pressed
+  if (HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin) == GPIO_PIN_RESET)
+  {
+    // Still pressed after 1s - this is a long press
+    // Start very long timer (5s total)
+    button_state = BTN_PRESSED;  // Keep state
+    UTIL_TIMER_Start(&ButtonVeryLongTimer);
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación larga detectada (>1s)\r\n");
+  }
+}
+
+/**
+  * @brief Button very long press timer callback (5 seconds)
+  * @param context not used
+  */
+static void OnButtonVeryLongTimerEvent(void *context)
+{
+  // Timer expired = button held for 5 seconds total
+  if (HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin) == GPIO_PIN_RESET)
+  {
+    // Still pressed after 5s = very long press = Factory Reset
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación muy larga (>5s) - FACTORY RESET\r\n");
+    PerformFactoryReset();
+  }
+  button_state = BTN_IDLE;
+}
+
+/**
+  * @brief Button double press window timer callback (500ms)
+  * @param context not used
+  */
+static void OnButtonDoubleTimerEvent(void *context)
+{
+  // Timer expired without second press = it was a single short press
+  if (button_state == BTN_WAIT_DOUBLE)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Pulsación corta - Iniciando lectura + envío LoRaWAN\r\n");
+    button_state = BTN_IDLE;
+    
+    // Trigger meter read + LoRaWAN send cycle
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+}
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  switch (GPIO_Pin)
+  /* ========== POWER_SENSE: Network state changed ========== */
+  if (GPIO_Pin == POWER_SENSE_Pin)
   {
-    case  BUT1_Pin:
-    	// XXX: always initialized
-      if (EventType == TX_ON_EVENT || 1)
-      {
-        UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
-      }
-      break;
-    default:
-      break;
+    static uint32_t last_power_sense_time = 0;
+    uint32_t now = HAL_GetTick();
+    
+    // Debounce: ignore rapid changes (100ms)
+    if (now - last_power_sense_time < 100) return;
+    last_power_sense_time = now;
+    
+    uint8_t state = HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin);
+    APP_LOG(TS_ON, VLEVEL_M, "Network state changed to %d! Triggering read...\r\n", state);
+    
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    return;
   }
+  
+  /* ========== PULSADOR: Button handling ========== */
+  if (GPIO_Pin != Pulsador_Pin) return;
+  
+  // Debounce: ignore rapid successive interrupts
+  uint32_t current_time = HAL_GetTick();
+  if (current_time - button_last_interrupt_time < BUTTON_DEBOUNCE_MS) return;
+  button_last_interrupt_time = current_time;
+  
+  // Read pin state to determine if button was pressed or released
+  // With PULLUP: LOW = pressed, HIGH = released
+  GPIO_PinState pin_state = HAL_GPIO_ReadPin(Pulsador_GPIO_Port, Pulsador_Pin);
+  
+  if (pin_state == GPIO_PIN_RESET)
+  {
+    // ========== BUTTON PRESSED (Falling edge) ==========
+    // LED visual feedback
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    UTIL_TIMER_Start(&LedTimer);
+    
+    if (button_state == BTN_IDLE)
+    {
+      // First press
+      button_press_time = current_time;
+      button_state = BTN_PRESSED;
+      
+      // Start 1-second timer to detect if it becomes a long press
+      UTIL_TIMER_Start(&ButtonShortTimer);
+      
+      APP_LOG(TS_ON, VLEVEL_M, "Pulsador presionado\r\n");
+    }
+    else if (button_state == BTN_WAIT_DOUBLE)
+    {
+      // Second press within double-press window = double press = RANGE TEST!
+      UTIL_TIMER_Stop(&ButtonDoubleTimer);
+      button_state = BTN_IDLE;
+      APP_LOG(TS_ON, VLEVEL_M, "Doble pulsación detectada - Test de alcance LoRaWAN\r\n");
+      range_test_pending = 1;
+      UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+    }
+  }
+  else
+  {
+    // ========== BUTTON RELEASED (Rising edge) ==========
+    if (button_state == BTN_PRESSED)
+    {
+      // Button was released before timers expired
+      // Stop timers
+      UTIL_TIMER_Stop(&ButtonShortTimer);
+      UTIL_TIMER_Stop(&ButtonVeryLongTimer);
+      
+      // Calculate how long it was pressed
+      uint32_t press_duration = current_time - button_press_time;
+      
+      if (press_duration < BUTTON_SHORT_MAX_MS)
+      {
+        // Less than 1 second = might be short press or start of double
+        // Wait to see if there's a second press
+        button_state = BTN_WAIT_DOUBLE;
+        UTIL_TIMER_Start(&ButtonDoubleTimer);
+        APP_LOG(TS_ON, VLEVEL_M, "Pulsador soltado - Esperando doble pulsación\r\n");
+      }
+      else
+      {
+        // Between 1-5 seconds = long press
+        button_state = BTN_IDLE;
+        APP_LOG(TS_ON, VLEVEL_M, "Pulsación larga (1-5s) - Reservado\r\n");
+      }
+    }
+  }
+  
+  // Legacy button_pressed flag for compatibility
+  button_pressed = 1;
 }
 
 /* USER CODE END PB_Callbacks */
@@ -450,6 +772,315 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
 
+/**
+  * @brief Perform factory reset - erase LoRaWAN NVM and device config
+  * @note This function erases the LoRaWAN session context from Flash,
+  *       resets all downlink configurations, and restarts the device.
+  */
+static void PerformFactoryReset(void)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "FACTORY RESET - Erasing LoRaWAN NVM...\r\n");
+  
+  /* Erase LoRaWAN NVM context (one Flash page = 2KB) */
+  FLASH_IF_Erase(LORAWAN_NVM_BASE_ADDRESS, FLASH_PAGE_SIZE);
+  
+  /* Reset device configuration to defaults */
+  device_config.reporting_interval_ms = 0;
+  device_config.config_valid = 0;
+  SaveDeviceConfig();
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Factory reset complete. Restarting...\r\n");
+  HAL_Delay(100);
+  NVIC_SystemReset();
+}
+
+/**
+  * @brief Request time synchronization from network server
+  * @note This function starts a timer to delay the actual time sync request,
+  *       giving the MAC layer time to finish processing after join.
+  *       Can be called after join or anytime the device needs to sync its clock.
+  */
+static void RequestTimeSync(void)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "Scheduling time sync in %d ms...\r\n", TIME_SYNC_DELAY_MS);
+  UTIL_TIMER_Start(&TimeSyncTimer);
+}
+
+/**
+  * @brief Timer callback to perform the actual time sync request
+  * @param context not used
+  */
+static void OnTimeSyncTimerEvent(void *context)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "Requesting time synchronization from network server...\r\n");
+  
+  /* Request DeviceTimeReq MAC command - this will be piggybacked on next uplink */
+  LmHandlerErrorStatus_t status = LmHandlerDeviceTimeReq();
+  if (status != LORAMAC_HANDLER_SUCCESS)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Failed to request DeviceTimeReq\r\n");
+    return;
+  }
+  
+  /* Prepare dummy uplink payload (0x00) to trigger the time sync response */
+  static uint8_t timeSyncPayload[1] = { 0x00 };
+  LmHandlerAppData_t timeSyncData = {
+    .Port = 1,
+    .BufferSize = 1,
+    .Buffer = timeSyncPayload
+  };
+  
+  /* Send the dummy uplink - the DeviceTimeReq will be included as a MAC command */
+  status = LmHandlerSend(&timeSyncData, LORAMAC_HANDLER_UNCONFIRMED_MSG, false);
+  if (status == LORAMAC_HANDLER_SUCCESS)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Time sync request sent (dummy uplink on port 1)\r\n");
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Failed to send time sync uplink (status=%d)\r\n", status);
+  }
+}
+
+/**
+  * @brief Check if periodic time sync is needed and request it
+  * @note Call this before sending an uplink. If 24 hours have passed since
+  *       the last sync, it will queue a DeviceTimeReq MAC command to be
+  *       piggybacked on the uplink (no extra dummy message needed).
+  */
+static void CheckPeriodicTimeSync(void)
+{
+  uint32_t current_seconds = HAL_GetTick() / 1000;
+  uint32_t elapsed = current_seconds - last_time_sync_timestamp;
+  
+  /* Check if 24 hours have passed since last sync */
+  if (elapsed >= TIME_SYNC_INTERVAL_S)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "24h elapsed since last sync (%u s). Requesting time sync...\r\n", 
+            (unsigned int)elapsed);
+    
+    /* Queue DeviceTimeReq - it will be sent with the next uplink */
+    LmHandlerErrorStatus_t status = LmHandlerDeviceTimeReq();
+    if (status == LORAMAC_HANDLER_SUCCESS)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "DeviceTimeReq queued for next uplink\r\n");
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Failed to queue DeviceTimeReq\r\n");
+    }
+  }
+}
+
+/**
+  * @brief Process downlink configuration command
+  * @param payload Pointer to command payload
+  * @param size Size of payload in bytes
+  */
+static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size)
+{
+  if (size < 2) 
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Invalid command size: %d\r\n", size);
+    return;
+  }
+  
+  // Command ID is Big-Endian (FF 03)
+  uint16_t cmd_id = (payload[0] << 8) | payload[1];
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Received command: 0x%04X\r\n", cmd_id);
+  
+  switch (cmd_id)
+  {
+    case CMD_SET_REPORTING_INTERVAL:
+      if (size >= CMD_0xFF03_SIZE)
+      {
+        // Parameter is Little-Endian (LSB first)
+        uint16_t interval_seconds = (payload[3] << 8) | payload[2];
+        APP_LOG(TS_ON, VLEVEL_M, "Set interval: %d seconds\r\n", interval_seconds);
+        SetReportingInterval(interval_seconds);
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF03 size: %d\r\n", size);
+      }
+      break;
+      
+    case CMD_RESET:
+      if (size >= CMD_0xFF10_SIZE && payload[2] == 0xFF)
+      {
+        /* Schedule reset after next uplink completes.
+           This ensures the ACK reaches the server before we reboot,
+           preventing the server from retrying the reset command. */
+        APP_LOG(TS_ON, VLEVEL_M, "RESET command received - Will restart after uplink completes\r\n");
+        pending_reset = 1;
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF10 command\r\n");
+      }
+      break;
+      
+    case CMD_FACTORY_RESET_LORAWAN:
+      if (size >= CMD_0xFF99_SIZE && payload[2] == 0xFF)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "FACTORY RESET command received (0xFF99FF)\r\n");
+        PerformFactoryReset();
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Invalid 0xFF99 command\r\n");
+      }
+      break;
+      
+    default:
+      APP_LOG(TS_ON, VLEVEL_M, "Unknown command: 0x%04X\r\n", cmd_id);
+      break;
+  }
+}
+
+
+/**
+  * @brief Set reporting interval
+  * @param interval_seconds Interval in seconds (0 = use default)
+  */
+static void SetReportingInterval(uint16_t interval_seconds)
+{
+  if (interval_seconds == 0)
+  {
+    // Reset to default
+    device_config.reporting_interval_ms = 0;
+    device_config.config_valid = 0;
+    APP_LOG(TS_ON, VLEVEL_M, "Reset to default interval\r\n");
+  }
+  else
+  {
+    device_config.reporting_interval_ms = (uint32_t)interval_seconds * 1000;
+    device_config.config_valid = CONFIG_MAGIC;
+    APP_LOG(TS_ON, VLEVEL_M, "New interval: %d ms\r\n", 
+            (int)device_config.reporting_interval_ms);
+  }
+  
+  // Save to Flash for persistence across resets
+  SaveDeviceConfig();
+  
+  // Apply immediately
+  ApplyReportingInterval();
+}
+
+/**
+  * @brief Apply reporting interval to TX timer
+  */
+static void ApplyReportingInterval(void)
+{
+  uint32_t interval_ms;
+  
+  if (device_config.config_valid == CONFIG_MAGIC && 
+      device_config.reporting_interval_ms > 0)
+  {
+    interval_ms = device_config.reporting_interval_ms;
+    APP_LOG(TS_ON, VLEVEL_M, "Using configured interval: %d ms\r\n", (int)interval_ms);
+  }
+  else
+  {
+    interval_ms = APP_TX_DUTYCYCLE;
+    APP_LOG(TS_ON, VLEVEL_M, "Using default interval: %d ms\r\n", (int)interval_ms);
+  }
+  
+  // Update global periodicity variable
+  TxPeriodicity = interval_ms;
+  
+  // Only restart timer if already joined in this session
+  if (EventType == TX_ON_TIMER && is_joined)
+  {
+    UTIL_TIMER_Stop(&TxTimer);
+    UTIL_TIMER_SetPeriod(&TxTimer, interval_ms);
+    UTIL_TIMER_Start(&TxTimer);
+    APP_LOG(TS_ON, VLEVEL_M, "TX Timer restarted with new interval\r\n");
+  }
+}
+
+/**
+  * @brief Save device configuration to Flash
+  */
+static void SaveDeviceConfig(void)
+{
+  FLASH_IF_StatusTypedef status;
+  
+  /* DeviceConfig_t is 8 bytes (4+1+3), aligned to 64-bit for Flash write */
+  status = FLASH_IF_Write(DEVICE_CONFIG_FLASH_ADDRESS, (const void *)&device_config, sizeof(DeviceConfig_t));
+  
+  if (status == FLASH_IF_OK)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Device config saved to Flash\r\n");
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "ERROR: Flash write failed (%d)\r\n", (int)status);
+  }
+}
+
+/**
+  * @brief Load device configuration from Flash
+  */
+static void LoadDeviceConfig(void)
+{
+  DeviceConfig_t loaded_config;
+  
+  FLASH_IF_Read((void *)&loaded_config, DEVICE_CONFIG_FLASH_ADDRESS, sizeof(DeviceConfig_t));
+  
+  /* Validate loaded config */
+  if (loaded_config.config_valid == CONFIG_MAGIC && 
+      loaded_config.reporting_interval_ms > 0 &&
+      loaded_config.reporting_interval_ms < 86400000) /* Max 24 hours */
+  {
+    device_config = loaded_config;
+    APP_LOG(TS_ON, VLEVEL_M, "Device config loaded from Flash: interval=%d ms\r\n", 
+            (int)device_config.reporting_interval_ms);
+  }
+  else
+  {
+    /* Invalid or empty config - use defaults */
+    device_config.reporting_interval_ms = 0;
+    device_config.config_valid = 0;
+    APP_LOG(TS_ON, VLEVEL_M, "No valid config in Flash, using defaults\r\n");
+  }
+}
+
+static void StartMeterReading(void)
+{
+  meter_retry_count = 0;
+  meter_data_ready = 0; // Invalidar datos anteriores
+  
+  // Iniciar primer intento
+  meter_retry_count++;
+  RequestMeterRead(meter_retry_count);
+  
+  // Iniciar timer de timeout
+  UTIL_TIMER_Start(&MeterTimeoutTimer);
+}
+
+static void OnMeterTimeoutTimerEvent(void *context)
+{
+  if (meter_retry_count < METER_MAX_RETRIES)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Reintentando (%d/%d)...\r\n", meter_retry_count, METER_MAX_RETRIES);
+    meter_retry_count++;
+    RequestMeterRead(meter_retry_count);
+    UTIL_TIMER_Start(&MeterTimeoutTimer);
+  }
+  else
+  {
+    // Se agotaron los reintentos
+    APP_LOG(TS_ON, VLEVEL_M, "Timeout lectura medidor. Maximos reintentos alcanzados. Enviando datos parciales.\r\n");
+    
+    // Deshabilitar recepción UART hasta próxima solicitud
+    HAL_UART_AbortReceive_IT(&huart1);
+    
+    meter_data_ready = 0; // NO hay datos
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
+  }
+}
 /* USER CODE END PrFD */
 
 static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
@@ -507,13 +1138,22 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
                 if (AppLedStateOn == RESET)
                 {
                   APP_LOG(TS_OFF, VLEVEL_H, "LED OFF\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET); /* LED_RED */
+                  // HAL_GPIO_WritePin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin, GPIO_PIN_SET); /* Disabled - POWER_SENSE is input */
                 }
                 else
                 {
                   APP_LOG(TS_OFF, VLEVEL_H, "LED ON\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); /* LED_RED */
+                  // HAL_GPIO_WritePin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin, GPIO_PIN_RESET); /* Disabled - POWER_SENSE is input */
                 }
+              }
+              break;
+
+            case CONFIG_PORT:
+              if (appData->BufferSize > 0)
+              {
+                APP_LOG(TS_ON, VLEVEL_M, "Config downlink on port %d, size: %d\r\n", 
+                        RxPort, appData->BufferSize);
+                ProcessDownlinkCommand(appData->Buffer, appData->BufferSize);
               }
               break;
 
@@ -529,6 +1169,15 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
       APP_LOG(TS_OFF, VLEVEL_H, "###### D/L FRAME:%04d | PORT:%d | DR:%d | SLOT:%s | RSSI:%d | SNR:%d\r\n",
               params->DownlinkCounter, RxPort, params->Datarate, slotStrings[params->RxSlot], params->Rssi, params->Snr);
     }
+    
+    /* Link Check response received */
+    if (params->LinkCheck == true)
+    {
+      link_check_pending = 0;
+      link_check_failures = 0;
+      APP_LOG(TS_ON, VLEVEL_M, "Link Check OK: Margin=%d, Gateways=%d\r\n", 
+              params->DemodMargin, params->NbGateways);
+    }
   }
   /* USER CODE END OnRxData_1 */
 }
@@ -536,90 +1185,329 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
+  
+  /* Check if 24h periodic time sync is needed */
+  CheckPeriodicTimeSync();
+  
+  // Si no tenemos datos listos y no estamos en medio de un reintento (esto se puede saber si el timer esta activo, pero
+  // mas facil es usar una flag o simplemente: si meter_data_ready es 0, iniciamos lectura y retornamos).
+  // PERO CUIDADO: Si el timeout expiro, meter_data_ready es 0 y DEBEMOS enviar.
+  // Como distinguimos "toca leer" de "fallo lectura"?
+  // Podemos usar meter_retry_count. Si es 0, es que aun no empezamos.
+  // Si es > 0, es que estamos en proceso o terminamos.
+  // Si terminamos por timeout, meter_retry_count sera >= METER_MAX_RETRIES (o lo reseteamos?)
+  
+  // Mejor enfoque:
+  // Si meter_retry_count == 0, iniciamos lectura y salimos.
+  // Si meter_retry_count > 0, verificamos:
+  //    Si meter_data_ready == 1, enviamos.
+  //    Si meter_data_ready == 0, significa que fallo (timeout). Enviamos lo que hay.
+  
+  // Hay un caso borde: El timer de LoRaWAN dispara SendTxData.
+  // Nosotros interceptamos aqui.
+  
+  /* ===== RANGE TEST: Si hay test pendiente, enviar inmediatamente sin leer medidor ===== */
+  /* Save original config BEFORE any modifications (for restoration after range test) */
+  static bool saved_adr_state;
+  static int8_t saved_datarate;
+  static LmHandlerMsgTypes_t saved_confirmed;
+  
+  if (range_test_pending)
+  {
+    // Save original config BEFORE modifying anything
+    saved_adr_state = LmHandlerParams.AdrEnable;
+    saved_datarate = LmHandlerParams.TxDatarate;
+    saved_confirmed = LmHandlerParams.IsTxConfirmed;
+    
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Construyendo mensaje de prueba...\r\n");
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Config guardada (ADR=%s, DR=%d, Confirmed=%s)\r\n",
+            saved_adr_state ? "ON" : "OFF", saved_datarate,
+            saved_confirmed == LORAMAC_HANDLER_CONFIRMED_MSG ? "YES" : "NO");
+    
+    // Obtener timestamp sincronizado
+    SysTime_t sysTime = SysTimeGet();
+    uint32_t timestamp = sysTime.Seconds;
+    
+    // Construir payload: 0xFF + timestamp (4 bytes big-endian)
+    AppData.Buffer[0] = 0xFF;
+    AppData.Buffer[1] = (timestamp >> 24) & 0xFF;
+    AppData.Buffer[2] = (timestamp >> 16) & 0xFF;
+    AppData.Buffer[3] = (timestamp >> 8) & 0xFF;
+    AppData.Buffer[4] = timestamp & 0xFF;
+    AppData.BufferSize = 5;
+    AppData.Port = LORAWAN_USER_APP_PORT;
+    
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test payload: FF %02X %02X %02X %02X (timestamp=%u)\r\n",
+            AppData.Buffer[1], AppData.Buffer[2], AppData.Buffer[3], AppData.Buffer[4],
+            (unsigned int)timestamp);
+    
+    // Activar modo confirmado (ACK)
+    LmHandlerParams.IsTxConfirmed = LORAMAC_HANDLER_CONFIRMED_MSG;
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Modo confirmado activado (ACK)\r\n");
+    
+    // Limpiar flag
+    range_test_pending = 0;
+    
+    // Saltar la lectura del medidor
+    goto skip_meter_reading;
+  }
+  
+  if (meter_retry_count == 0) {
+      APP_LOG(TS_ON, VLEVEL_M, "Ciclo LoRaWAN: Iniciando lectura de medidor...\r\n");
+      StartMeterReading();
+      return; // Salimos para esperar a que termine la lectura
+  }
+  
+  // Si llegamos aqui, es porque:
+  // 1. LoRaWAN_NotifyMeterDataReady llamo a SendTxData (exito)
+  // 2. OnMeterTimeoutTimerEvent llamo a SendTxData (fallo)
+  
+  // En ambos casos, procedemos a enviar.
+  // IMPORTANTE: Resetear meter_retry_count para la proxima vez?
+  // Si lo reseteamos aqui, la proxima vez que entre (por timer LoRaWAN) sera 0 y leera de nuevo. Correcto.
+  meter_retry_count = 0; 
+  
+
   LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
-  uint8_t batteryLevel = GetBatteryLevel();
-  sensor_t sensor_data;
   UTIL_TIMER_Time_t nextTxIn = 0;
-
-#ifdef CAYENNE_LPP
-  uint8_t channel = 0;
-#else
-  uint16_t pressure = 0;
-  int16_t temperature = 0;
-  uint16_t humidity = 0;
-  uint32_t i = 0;
-  int32_t latitude = 0;
-  int32_t longitude = 0;
-  uint16_t altitudeGps = 0;
-#endif /* CAYENNE_LPP */
-
-  EnvSensors_Read(&sensor_data);
-
-  APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
-  APP_LOG(TS_ON, VLEVEL_M, "temp: %d\r\n", (int16_t)(sensor_data.temperature));
+  uint32_t payload_index = 0;
 
   AppData.Port = LORAWAN_USER_APP_PORT;
 
-#ifdef CAYENNE_LPP
-  CayenneLppReset();
-  CayenneLppAddBarometricPressure(channel++, sensor_data.pressure);
-  CayenneLppAddTemperature(channel++, sensor_data.temperature);
-  CayenneLppAddRelativeHumidity(channel++, (uint16_t)(sensor_data.humidity));
+  // Verificar si hay datos del medidor listos (y que no sea un envio forzado por error de lectura)
+  if (meter_data_ready) {
+      APP_LOG(TS_ON, VLEVEL_M, "Construyendo payload TLV desde datos OBIS...\r\n");
 
-  if ((LmHandlerParams.ActiveRegion != LORAMAC_REGION_US915) && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AU915)
-      && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AS923))
-  {
-    CayenneLppAddDigitalInput(channel++, GetBatteryLevel());
-    CayenneLppAddDigitalOutput(channel++, AppLedStateOn);
+      // Variables temporales para parseo
+      float valor_float = 0.0f;
+      uint32_t valor_uint32 = 0;
+      bool parse_ok = false;
+
+    // ===== 0x02: Batería (%) - 1 byte =====
+    uint8_t bateria_level_lora = GetBatteryLevel();
+    uint8_t bateria_pct = 0xFF;
+    /* Convert LoRa battery level (1..254) to percentage (0..100).
+     Keep 0xFF as 'not measured' sentinel. */
+    if (bateria_level_lora == 0xFF)
+    {
+      bateria_pct = 0xFF;
+    }
+    else if (bateria_level_lora == 0)
+    {
+      bateria_pct = 0;
+    }
+    else
+    {
+      const uint16_t LORAWAN_MAX_BAT = 254U;
+      bateria_pct = (uint8_t)((((uint32_t)bateria_level_lora) * 100U + (LORAWAN_MAX_BAT/2U)) / LORAWAN_MAX_BAT);
+    }
+    AppData.Buffer[payload_index++] = 0x02;  // ID
+    AppData.Buffer[payload_index++] = bateria_pct;
+    if (bateria_pct == 0xFF)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=NA\r\n");
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%u%%\r\n", (unsigned int)bateria_pct);
+    }
+
+    /* ===== 0x04: network_state (1 byte) - detect external 3.3V on PB5 ===== */
+    {
+      uint8_t net_state = 0;
+      if (HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin) == GPIO_PIN_SET)
+      {
+        net_state = 1; /* external 3.3V present */
+      }
+      AppData.Buffer[payload_index++] = 0x04; /* ID */
+      AppData.Buffer[payload_index++] = net_state;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x04 network_state=%u\r\n", (unsigned int)net_state);
+    }
+
+      // ===== 0x0A: Energía activa total (15.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "15.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t energia_kwh = (uint32_t)(valor_float);  // kWh a Wh
+      AppData.Buffer[payload_index++] = 0x0A;  // ID
+      AppData.Buffer[payload_index++] = (energia_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (energia_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (energia_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = energia_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0A Activa_Total=%u Wh\r\n", (unsigned int)energia_kwh);
+    }
+
+      // ===== 0x0B: Energía reactiva total (130.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "130.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_kvarh = (uint32_t)(valor_float);  // kVArh a VArh
+      AppData.Buffer[payload_index++] = 0x0B;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x0B Reactiva_Total=%u VArh\r\n", (unsigned int)reactiva_kvarh);
+    }
+
+      // ===== 0x28: Demanda máxima potencia (1.6.0) - 2 bytes en W =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "1.6.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 65.535f) {
+      uint16_t peak_demand_kw = (uint16_t)(valor_float);  // kW a W
+      AppData.Buffer[payload_index++] = 0x28;  // ID
+      AppData.Buffer[payload_index++] = (peak_demand_kw >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = peak_demand_kw & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x28 Demanda_Max=%u W\r\n", (unsigned int)peak_demand_kw);
+    }
+
+      // ===== 0x3C: Energía activa consumida (1.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "1.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t consumida_kwh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3C;  // ID
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (consumida_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = consumida_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3C Activa_Consumida=%u Wh\r\n", (unsigned int)consumida_kwh);
+    }
+
+      // ===== 0x3D: Energía activa generada (2.8.0) - 4 bytes en Wh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "2.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t generada_kwh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3D;  // ID
+      AppData.Buffer[payload_index++] = (generada_kwh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (generada_kwh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (generada_kwh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = generada_kwh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3D Activa_Generada=%u Wh\r\n", (unsigned int)generada_kwh);
+    }
+
+      // ===== 0x3E: Energía reactiva consumida (3.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "3.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_cons_kvarh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3E;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_cons_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_cons_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3E Reactiva_Consumida=%u VArh\r\n", (unsigned int)reactiva_cons_kvarh);
+    }
+
+      // ===== 0x3F: Energía reactiva generada (4.8.0) - 4 bytes en VArh =====
+      parse_ok = ParseOBISFloat(meter_data_buffer, "4.8.0(", &valor_float);
+    if (parse_ok && valor_float >= 0.0f && valor_float < 10000000.0f) {
+      uint32_t reactiva_gen_kvarh = (uint32_t)(valor_float);
+      AppData.Buffer[payload_index++] = 0x3F;  // ID
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (reactiva_gen_kvarh >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = reactiva_gen_kvarh & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x3F Reactiva_Generada=%u VArh\r\n", (unsigned int)reactiva_gen_kvarh);
+    }
+
+      // ===== 0x5A: Número de serie (C.1.0) - 4 bytes =====
+    parse_ok = ParseOBISUint32(meter_data_buffer, "C.1.0(", &valor_uint32);
+    if (parse_ok && valor_uint32 != 0) {
+      AppData.Buffer[payload_index++] = 0x5A;  // ID
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 24) & 0xFF;
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 16) & 0xFF;
+      AppData.Buffer[payload_index++] = (valor_uint32 >> 8) & 0xFF;
+      AppData.Buffer[payload_index++] = valor_uint32 & 0xFF;
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x5A Numero_Serie=%u\r\n", (unsigned int)valor_uint32);
+    }
+
+      AppData.BufferSize = payload_index;
+      meter_data_ready = 0;
+
+      APP_LOG(TS_ON, VLEVEL_M, "Payload TLV construido: %d bytes\r\n", payload_index);
+
+  } else {
+      // Sin datos del medidor, enviar solo batería
+      APP_LOG(TS_ON, VLEVEL_M, "Sin datos del medidor (o fallo lectura), enviando solo bateria y estado\r\n");
+    {
+      /* Fallback: send battery + network_state */
+      uint8_t bateria_level_lora = GetBatteryLevel();
+      uint8_t bateria_pct = 0xFF;
+      const uint16_t LORAWAN_MAX_BAT = 254U;
+      if (bateria_level_lora == 0xFF)
+      {
+        bateria_pct = 0xFF;
+      }
+      else if (bateria_level_lora == 0)
+      {
+        bateria_pct = 0;
+      }
+      else
+      {
+        bateria_pct = (uint8_t)((((uint32_t)bateria_level_lora) * 100U + (LORAWAN_MAX_BAT/2U)) / LORAWAN_MAX_BAT);
+      }
+      AppData.Buffer[0] = 0x02;  // ID Batería
+      AppData.Buffer[1] = bateria_pct;
+
+      /* Add network_state TLV (0x04) */
+      uint8_t net_state = 0;
+      if (HAL_GPIO_ReadPin(POWER_SENSE_GPIO_Port, POWER_SENSE_Pin) == GPIO_PIN_SET)
+      {
+        net_state = 1;
+      }
+      AppData.Buffer[2] = 0x04;
+      AppData.Buffer[3] = net_state;
+      AppData.BufferSize = 4;
+
+      if (bateria_pct == 0xFF)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=NA\r\n");
+      }
+      else
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x02 Bateria=%u%%\r\n", (unsigned int)bateria_pct);
+      }
+      APP_LOG(TS_ON, VLEVEL_M, "TLV: 0x04 network_state=%u\r\n", (unsigned int)net_state);
+    }
   }
-
-  CayenneLppCopy(AppData.Buffer);
-  AppData.BufferSize = CayenneLppGetSize();
-#else  /* not CAYENNE_LPP */
-  humidity    = (uint16_t)(sensor_data.humidity * 10);            /* in %*10     */
-  temperature = (int16_t)(sensor_data.temperature);
-  pressure = (uint16_t)(sensor_data.pressure * 100 / 10); /* in hPa / 10 */
-
-  AppData.Buffer[i++] = AppLedStateOn;
-  AppData.Buffer[i++] = (uint8_t)((pressure >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(pressure & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(temperature & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)((humidity >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
-
-  if ((LmHandlerParams.ActiveRegion == LORAMAC_REGION_US915) || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AU915)
-      || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AS923))
-  {
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-  }
-  else
-  {
-    latitude = sensor_data.latitude;
-    longitude = sensor_data.longitude;
-
-    AppData.Buffer[i++] = GetBatteryLevel();        /* 1 (very low) to 254 (fully charged) */
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(latitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(longitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((altitudeGps >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(altitudeGps & 0xFF);
-  }
-
-  AppData.BufferSize = i;
-#endif /* CAYENNE_LPP */
 
   if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
   {
     UTIL_TIMER_Stop(&JoinLedTimer);
-#if 0   // XXX:
-    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET); /* LED_RED */
-#endif
+  }
+
+skip_meter_reading:
+  /* Link Check connectivity detection: send request every N uplinks */
+  uplink_counter_for_link_check++;
+  if (uplink_counter_for_link_check >= LINK_CHECK_INTERVAL)
+  {
+    uplink_counter_for_link_check = 0;
+    link_check_pending = 1;
+    LmHandlerLinkCheckReq();
+    APP_LOG(TS_ON, VLEVEL_M, "Link Check requested\r\n");
+  }
+
+  /* Force DR3 for range test (must be right before send to avoid being overridden)
+   * DR3 allows 53 bytes with Dwell Time enabled - sufficient for our 42-byte meter payload */
+  bool is_range_test = (AppData.BufferSize == 5 && AppData.Buffer[0] == 0xFF);
+  
+  if (is_range_test)
+  {
+    // Disable ADR at MAC layer
+    LmHandlerErrorStatus_t adr_status = LmHandlerSetAdrEnable(false);
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: ADR deshabilitado (era %s): %s\r\n", 
+            saved_adr_state ? "ON" : "OFF",
+            adr_status == LORAMAC_HANDLER_SUCCESS ? "OK" : "ERROR");
+    
+    // Force DR3 (minimum for 42+ bytes with Dwell Time)
+    LmHandlerErrorStatus_t dr_status = LmHandlerSetTxDatarate(DR_3);
+    if (dr_status == LORAMAC_HANDLER_SUCCESS)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Range Test: DR3 configurado OK\r\n");
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Range Test: ERROR DR3 (status=%d)\r\n", dr_status);
+    }
+    
+    // Force confirmed message for range test (already set in range test block, but ensure it's set)
+    LmHandlerParams.IsTxConfirmed = LORAMAC_HANDLER_CONFIRMED_MSG;
   }
 
   status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false);
@@ -636,13 +1524,23 @@ static void SendTxData(void)
     }
   }
 
+  /* Restore ADR, DR and confirmed state after range test */
+  if (is_range_test)
+  {
+    LmHandlerSetAdrEnable(saved_adr_state);
+    LmHandlerSetTxDatarate(saved_datarate);
+    LmHandlerParams.IsTxConfirmed = saved_confirmed;
+    APP_LOG(TS_ON, VLEVEL_M, "Range Test: Config restaurada (ADR=%s, DR=%d, Confirmed=%s)\r\n",
+            saved_adr_state ? "ON" : "OFF", saved_datarate,
+            saved_confirmed == LORAMAC_HANDLER_CONFIRMED_MSG ? "YES" : "NO");
+  }
+
   if (EventType == TX_ON_TIMER)
   {
     UTIL_TIMER_Stop(&TxTimer);
     UTIL_TIMER_SetPeriod(&TxTimer, MAX(nextTxIn, TxPeriodicity));
     UTIL_TIMER_Start(&TxTimer);
   }
-
   /* USER CODE END SendTxData_1 */
 }
 
@@ -710,6 +1608,33 @@ static void OnTxData(LmHandlerTxParams_t *params)
       {
         APP_LOG(TS_OFF, VLEVEL_H, "UNCONFIRMED\r\n");
       }
+      
+      /* Check for pending reset command - execute after uplink is complete
+         so the server receives the ACK and won't retry the command */
+      if (pending_reset)
+      {
+        APP_LOG(TS_ON, VLEVEL_M, "Executing pending reset...\r\n");
+        HAL_Delay(100);
+        NVIC_SystemReset();
+      }
+      
+      /* Link Check failure detection */
+      if (link_check_pending)
+      {
+        /* No Link Check response received - increment failures */
+        link_check_pending = 0;
+        link_check_failures++;
+        APP_LOG(TS_ON, VLEVEL_M, "Link Check FAILED (%d/%d)\r\n", 
+                link_check_failures, MAX_LINK_CHECK_FAILURES);
+        
+        if (link_check_failures >= MAX_LINK_CHECK_FAILURES)
+        {
+          APP_LOG(TS_ON, VLEVEL_M, "Max Link Check failures - forcing rejoin\r\n");
+          link_check_failures = 0;
+          uplink_counter_for_link_check = 0;
+          LmHandlerJoin(ActivationType, true);  // Force rejoin
+        }
+      }
     }
   }
   /* USER CODE END OnTxData_1 */
@@ -722,6 +1647,14 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
   {
     if (joinParams->Status == LORAMAC_HANDLER_SUCCESS)
     {
+      /* Reset failure counter on successful join */
+      join_failure_count = 0;
+      
+      /* Reset Link Check counters on successful join */
+      link_check_failures = 0;
+      link_check_pending = 0;
+      uplink_counter_for_link_check = 0;
+      
       UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaStoreContextEvent), CFG_SEQ_Prio_0);
 
       UTIL_TIMER_Stop(&JoinLedTimer);
@@ -738,10 +1671,26 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
       {
         APP_LOG(TS_OFF, VLEVEL_M, "OTAA =====================\r\n");
       }
+      
+      /* Mark as joined in this session */
+      is_joined = 1;
+      
+      /* Start TX timer now that we are joined */
+      if (EventType == TX_ON_TIMER)
+      {
+        UTIL_TIMER_Start(&TxTimer);
+        APP_LOG(TS_ON, VLEVEL_M, "TX Timer started after JOIN\r\n");
+      }
+      
+      /* Request time synchronization from network server */
+      RequestTimeSync();
     }
     else
     {
-      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED\r\n");
+      /* Increment failure counter */
+      join_failure_count++;
+      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED (attempt %u)\r\n", 
+              (unsigned int)join_failure_count);
 
       if (joinParams->Mode == ACTIVATION_TYPE_OTAA) {
           APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = RE-TRYING OTAA JOIN\r\n");
@@ -786,6 +1735,17 @@ static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params)
     }
   }
   /* USER CODE END OnBeaconStatusChange_1 */
+}
+
+static void OnSysTimeUpdate(void)
+{
+  /* USER CODE BEGIN OnSysTimeUpdate_1 */
+  SysTime_t sysTime = SysTimeGet();
+  last_time_sync_timestamp = HAL_GetTick() / 1000;  /* Record when we synced (seconds since boot) */
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Time synchronized from network: %u (Unix timestamp)\r\n", 
+          (unsigned int)sysTime.Seconds);
+  /* USER CODE END OnSysTimeUpdate_1 */
 }
 
 static void OnClassChange(DeviceClass_t deviceClass)
@@ -968,15 +1928,8 @@ static void OnStoreContextRequest(void *nvm, uint32_t nvm_size)
   /* USER CODE BEGIN OnStoreContextRequest_1 */
 
   /* USER CODE END OnStoreContextRequest_1 */
-  /* store nvm in flash */
-  if (HAL_FLASH_Unlock() == HAL_OK)
-  {
-    if (FLASH_IF_EraseByPages(PAGE(LORAWAN_NVM_BASE_ADDRESS), 1, 0U) == FLASH_OK)
-    {
-      FLASH_IF_Write(LORAWAN_NVM_BASE_ADDRESS, (uint8_t *)nvm, nvm_size, NULL);
-    }
-    HAL_FLASH_Lock();
-  }
+  FLASH_IF_Write(LORAWAN_NVM_BASE_ADDRESS, (const void *)nvm, nvm_size);
+
   /* USER CODE BEGIN OnStoreContextRequest_Last */
 
   /* USER CODE END OnStoreContextRequest_Last */
@@ -987,7 +1940,7 @@ static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size)
   /* USER CODE BEGIN OnRestoreContextRequest_1 */
 
   /* USER CODE END OnRestoreContextRequest_1 */
-  UTIL_MEM_cpy_8(nvm, (void *)LORAWAN_NVM_BASE_ADDRESS, nvm_size);
+  FLASH_IF_Read(nvm, LORAWAN_NVM_BASE_ADDRESS, nvm_size);
   /* USER CODE BEGIN OnRestoreContextRequest_Last */
 
   /* USER CODE END OnRestoreContextRequest_Last */

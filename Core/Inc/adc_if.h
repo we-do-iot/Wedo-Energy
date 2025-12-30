@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -53,6 +53,35 @@ extern "C" {
 #define VDD_MIN                     1800
 
 /* USER CODE BEGIN EC */
+
+/**
+  * IMPORTANTE: CubeMX genera automáticamente defines para batería CR2032 arriba.
+  * Los redefinimos aquí para usar valores de batería Li-ion.
+  * Usamos #undef para evitar warnings de redefinición.
+  */
+
+/* Primero eliminamos las definiciones generadas por CubeMX */
+#undef VDD_BAT
+#undef VDD_MIN
+
+/**
+  * @brief Typical Li-ion battery nominal values (mV)
+  * We measure the battery through a resistor divider and then reconstruct the
+  * real battery voltage in software. The battery maximum is ~4.2V for Li-ion.
+  */
+#define BAT_LI_ION                  ((uint32_t) 4200)
+
+/**
+  * @brief Maximum battery level in mV (Li-ion)
+  * REDEFINIDO: CubeMX genera VDD_BAT = BAT_CR2032, nosotros usamos BAT_LI_ION
+  */
+#define VDD_BAT                     BAT_LI_ION
+
+/**
+  * @brief Minimum battery level in mV for reporting (below this is considered empty)
+  * REDEFINIDO: CubeMX genera VDD_MIN = 1800, nosotros usamos 3000 para Li-ion
+  */
+#define VDD_MIN                     3000
 
 /* USER CODE END EC */
 

@@ -1,0 +1,60 @@
+# STM32CubeIDE / Eclipse
+.settings/
+.metadata/
+.project
+.cproject
+.mxproject
+*.launch
+*.ioc.bak
+
+# Build outputs
+Debug/
+Release/
+build/
+*.o
+*.d
+*.su
+*.list
+*.map
+*.elf
+*.bin
+*.hex
+*.cyclo
+
+# Backup files
+*.bak
+*.orig
+*.swp
+*~
+Backup/
+
+# User-specific files (opcional - descomentar si no quieres compartir)
+# .project
+# .cproject
+# .settings/
+
+# MX generated files (opcional - descomentar si solo quieres código custom)
+# Drivers/
+# Middlewares/Third_Party/
+
+# System files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Logs (opcional - descomentar si no quieres logs en el repo)
+*.log
+
+# STM32 specific
+*.bin
+*.elf
+*.hex
+*.map
+*.list
+
+# Git merge files
+*.merge_file*

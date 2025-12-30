@@ -66,9 +66,6 @@
 #define CMD_0xFF10_SIZE  3  // FF 10 + 1 byte (0xFF)
 #define CMD_0xFF99_SIZE  3  // FF 99 FF
 
-/* Max join failures before automatic factory reset */
-#define MAX_JOIN_FAILURES_BEFORE_RESET  32
-
 /* Link Check connectivity detection */
 #define LINK_CHECK_INTERVAL         10  // Send Link Check every N uplinks
 #define MAX_LINK_CHECK_FAILURES      5  // Force rejoin after N consecutive failures
@@ -306,6 +303,9 @@ static void ProcessDownlinkCommand(uint8_t *payload, uint8_t size);
 static void SetReportingInterval(uint16_t interval_seconds);
 static void ApplyReportingInterval(void);
 static void PerformFactoryReset(void);
+static void RequestTimeSync(void);
+static void OnTimeSyncTimerEvent(void *context);
+static void CheckPeriodicTimeSync(void);
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -442,8 +442,8 @@ static uint8_t flash_ram_buffer[FLASH_IF_BUFFER_SIZE];
 /* Flag to track if we have joined the network in this session */
 static uint8_t is_joined = 0;
 
-/* Join failure counter for automatic factory reset */
-static uint8_t join_failure_count = 0;
+/* Join failure counter for log display */
+static uint32_t join_failure_count = 0;
 
 /* Link Check connectivity detection */
 static uint8_t uplink_counter_for_link_check = 0;
@@ -452,6 +452,12 @@ static uint8_t link_check_failures = 0;
 
 /* Range test pending flag - set by double-press, cleared after sending */
 static volatile uint8_t range_test_pending = 0;
+
+/* Time sync configuration */
+#define TIME_SYNC_DELAY_MS      2000        /* Delay after join to request time sync */
+#define TIME_SYNC_INTERVAL_S    (24*60*60)  /* Request time sync every 24 hours */
+static UTIL_TIMER_Object_t TimeSyncTimer;
+static uint32_t last_time_sync_timestamp = 0;  /* Last successful sync timestamp (seconds since boot) */
 /* USER CODE END PV */
 
 /* Exported functions ---------------------------------------------------------*/
@@ -557,6 +563,9 @@ void LoRaWAN_Init(void)
   UTIL_TIMER_Create(&ButtonShortTimer, BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonShortTimerEvent, NULL);
   UTIL_TIMER_Create(&ButtonVeryLongTimer, BUTTON_LONG_MAX_MS - BUTTON_SHORT_MAX_MS, UTIL_TIMER_ONESHOT, OnButtonVeryLongTimerEvent, NULL);
   UTIL_TIMER_Create(&ButtonDoubleTimer, BUTTON_DOUBLE_WINDOW_MS, UTIL_TIMER_ONESHOT, OnButtonDoubleTimerEvent, NULL);
+  
+  // Time sync timer (delay after join to sync clock)
+  UTIL_TIMER_Create(&TimeSyncTimer, TIME_SYNC_DELAY_MS, UTIL_TIMER_ONESHOT, OnTimeSyncTimerEvent, NULL);
 
   /* USER CODE END LoRaWAN_Init_1 */
 
@@ -783,6 +792,84 @@ static void PerformFactoryReset(void)
   APP_LOG(TS_ON, VLEVEL_M, "Factory reset complete. Restarting...\r\n");
   HAL_Delay(100);
   NVIC_SystemReset();
+}
+
+/**
+  * @brief Request time synchronization from network server
+  * @note This function starts a timer to delay the actual time sync request,
+  *       giving the MAC layer time to finish processing after join.
+  *       Can be called after join or anytime the device needs to sync its clock.
+  */
+static void RequestTimeSync(void)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "Scheduling time sync in %d ms...\r\n", TIME_SYNC_DELAY_MS);
+  UTIL_TIMER_Start(&TimeSyncTimer);
+}
+
+/**
+  * @brief Timer callback to perform the actual time sync request
+  * @param context not used
+  */
+static void OnTimeSyncTimerEvent(void *context)
+{
+  APP_LOG(TS_ON, VLEVEL_M, "Requesting time synchronization from network server...\r\n");
+  
+  /* Request DeviceTimeReq MAC command - this will be piggybacked on next uplink */
+  LmHandlerErrorStatus_t status = LmHandlerDeviceTimeReq();
+  if (status != LORAMAC_HANDLER_SUCCESS)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Failed to request DeviceTimeReq\r\n");
+    return;
+  }
+  
+  /* Prepare dummy uplink payload (0x00) to trigger the time sync response */
+  static uint8_t timeSyncPayload[1] = { 0x00 };
+  LmHandlerAppData_t timeSyncData = {
+    .Port = 1,
+    .BufferSize = 1,
+    .Buffer = timeSyncPayload
+  };
+  
+  /* Send the dummy uplink - the DeviceTimeReq will be included as a MAC command */
+  status = LmHandlerSend(&timeSyncData, LORAMAC_HANDLER_UNCONFIRMED_MSG, false);
+  if (status == LORAMAC_HANDLER_SUCCESS)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Time sync request sent (dummy uplink on port 1)\r\n");
+  }
+  else
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "Failed to send time sync uplink (status=%d)\r\n", status);
+  }
+}
+
+/**
+  * @brief Check if periodic time sync is needed and request it
+  * @note Call this before sending an uplink. If 24 hours have passed since
+  *       the last sync, it will queue a DeviceTimeReq MAC command to be
+  *       piggybacked on the uplink (no extra dummy message needed).
+  */
+static void CheckPeriodicTimeSync(void)
+{
+  uint32_t current_seconds = HAL_GetTick() / 1000;
+  uint32_t elapsed = current_seconds - last_time_sync_timestamp;
+  
+  /* Check if 24 hours have passed since last sync */
+  if (elapsed >= TIME_SYNC_INTERVAL_S)
+  {
+    APP_LOG(TS_ON, VLEVEL_M, "24h elapsed since last sync (%u s). Requesting time sync...\r\n", 
+            (unsigned int)elapsed);
+    
+    /* Queue DeviceTimeReq - it will be sent with the next uplink */
+    LmHandlerErrorStatus_t status = LmHandlerDeviceTimeReq();
+    if (status == LORAMAC_HANDLER_SUCCESS)
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "DeviceTimeReq queued for next uplink\r\n");
+    }
+    else
+    {
+      APP_LOG(TS_ON, VLEVEL_M, "Failed to queue DeviceTimeReq\r\n");
+    }
+  }
 }
 
 /**
@@ -1098,6 +1185,10 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
+  
+  /* Check if 24h periodic time sync is needed */
+  CheckPeriodicTimeSync();
+  
   // Si no tenemos datos listos y no estamos en medio de un reintento (esto se puede saber si el timer esta activo, pero
   // mas facil es usar una flag o simplemente: si meter_data_ready es 0, iniciamos lectura y retornamos).
   // PERO CUIDADO: Si el timeout expiro, meter_data_ready es 0 y DEBEMOS enviar.
@@ -1590,20 +1681,16 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
         UTIL_TIMER_Start(&TxTimer);
         APP_LOG(TS_ON, VLEVEL_M, "TX Timer started after JOIN\r\n");
       }
+      
+      /* Request time synchronization from network server */
+      RequestTimeSync();
     }
     else
     {
       /* Increment failure counter */
       join_failure_count++;
-      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED (%d/%d)\r\n", 
-              join_failure_count, MAX_JOIN_FAILURES_BEFORE_RESET);
-
-      /* Check if we've exceeded max failures */
-      if (join_failure_count >= MAX_JOIN_FAILURES_BEFORE_RESET)
-      {
-        APP_LOG(TS_ON, VLEVEL_M, "Max join failures reached - FACTORY RESET\r\n");
-        PerformFactoryReset();
-      }
+      APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOIN FAILED (attempt %u)\r\n", 
+              (unsigned int)join_failure_count);
 
       if (joinParams->Mode == ACTIVATION_TYPE_OTAA) {
           APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = RE-TRYING OTAA JOIN\r\n");
@@ -1653,7 +1740,11 @@ static void OnBeaconStatusChange(LmHandlerBeaconParams_t *params)
 static void OnSysTimeUpdate(void)
 {
   /* USER CODE BEGIN OnSysTimeUpdate_1 */
-
+  SysTime_t sysTime = SysTimeGet();
+  last_time_sync_timestamp = HAL_GetTick() / 1000;  /* Record when we synced (seconds since boot) */
+  
+  APP_LOG(TS_ON, VLEVEL_M, "Time synchronized from network: %u (Unix timestamp)\r\n", 
+          (unsigned int)sysTime.Seconds);
   /* USER CODE END OnSysTimeUpdate_1 */
 }
 

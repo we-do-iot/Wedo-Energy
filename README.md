@@ -1,80 +1,105 @@
-# Seeed-LoRa-E5
-LoRaWAN end node built from scratch using STM32CubeIDE/CubeMX for the LoRa-E5 WLE5x
+# Wedo-Energy
 
-UPDATE 9 May 2023: you are invited to test the FW1.3 branch, which is the result of letting STM32CubeIDE update to V1.3 FW. I haven't tested it yet but I expect it will work. If you do test it, please let me know and I'll merge it to master.
+Firmware LoRaWAN para monitoreo remoto de medidores de energía eléctrica.
 
-UPDATE 14 July 2022: I reviewed the V1.2FM merge, enabled LoRaWAN 1.0.4 support (including NV storage of devNonce) and tested in Class A, turning the red LED on and off. I apologize for the flurry of updates in master; future updates will be done properly in a branch.
+## Descripción
 
-NOTE: I did a quick merge of STM32WLxx V1.2 firmware support. Basic testing shows it works correctly but please let me know if you encounter any issues.
+**Wedo-Energy** es un dispositivo IoT basado en el módulo LoRa-E5 (STM32WLE5) que permite la lectura remota de medidores de energía eléctrica y transmite los datos a través de la red LoRaWAN.
 
-If you're looking for an RAK3172 version of this, have a look at https://github.com/danak6jq/RAK3172
+### Características principales
 
-Note: the project defaults to disabling SWD/probe pins and enabling low-power mode. For development with an ST/Link, I recommend enabling the debugger and disabling low-power mode.
+- 📡 **Conectividad LoRaWAN** - Compatible con LoRaWAN 1.0.4, soporta Class A
+- ⚡ **Lectura de medidores** - Comunicación serial con medidores de energía eléctrica
+- 🔋 **Bajo consumo** - Optimizado para operación con batería
+- 🔄 **Intervalo configurable** - El período de reporte se puede ajustar via downlink
+- 📊 **Datos de energía** - Transmite consumo, voltaje, corriente, factor de potencia y más
+- 🧪 **Range Test** - Modo de prueba de cobertura integrado
 
-<img width="429" alt="image" src="https://user-images.githubusercontent.com/942815/146811232-a0f1dc4a-c3dc-4035-9ad7-c3d2b41e4ae9.png">
+### Medidores soportados
 
+| Fabricante | Modelo | Estado |
+|------------|--------|--------|
+| Hexing | HXE310 | ✅ Soportado |
+| *Otros* | *Por definir* | 🔜 Próximamente |
 
-## This assumes a general familiarity with STM32CubeIDE and LoRaWAN concepts.
-If you haven't used STM32CubeIDE before, I suggest doing a couple of smaller projects using ST Nucleo boards to familiarize yourself.
+## Requisitos
 
-## From the Seeed-Studio repo: Before starting
+### Hardware
+- Módulo LoRa-E5 (Seeed Studio) o compatible con STM32WLE5
+- Programador ST-LINK
+- Cable USB-C para alimentación y comunicación serial
 
-- Please read [Erase Factory AT Firmware](https://wiki.seeedstudio.com/LoRa_E5_mini/#21-erase-factory-at-firmware) section first, you need to retrieve and save the Device EUI, then erase the Factory AT Firmware before we program with SDK
+### Software
+- [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) v1.7.0 o superior
+- [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html)
 
-- Install V1.7.0 or later [STM32CubeIDE(to compilation and debug)](https://my.st.com/content/my_st_com/en/products/development-tools/software-development-tools/stm32-software-development-tools/stm32-ides/stm32cubeide.html) and [STM32CubeProgrammer(to program STM32 devices)](https://my.st.com/content/my_st_com/en/products/development-tools/software-development-tools/stm32-software-development-tools/stm32-programmers/stm32cubeprog.license=1614563305396.product=STM32CubePrg-W64.version=2.6.0.html). Launch STM32CubeIDE and install V1.1.0 of [STM32Cube MCU Package for STM32WL series(SDK)](https://my.st.com/content/my_st_com/en/products/embedded-software/mcu-mpu-embedded-software/stm32-embedded-software/stm32cube-mcu-mpu-packages/stm32cubewl.license=1608693595598.product=STM32CubeWL.version=1.0.0.html#overview)
+### Infraestructura
+- Gateway LoRaWAN
+- Network Server (TTN, ChirpStack, etc.)
 
-- LoRaWAN Gateway connected to LoRaWAN Network Server(e.g. TTN; I am using a local gateway and local ChirpStack server)
+## Configuración
 
-- Prepare an USB TypeC cable and a ST-LINK. Connect the TypeC cable to the TypeC port for power and serial communication, connect the ST-LINK to the SWD pins like this (recommend connecting Vcc and nRST as well):
+### 1. Clonar el repositorio
 
-![image](https://user-images.githubusercontent.com/942815/145846356-6c3d4828-18b1-40a3-a6d0-25d979629093.png)
+```bash
+git clone https://github.com/we-do-iot/Wedo-Energy.git
+```
 
-- Before erasing the Seeed factory AT firmware, get the Device EUI. Connect a USB-C cable to the LoRa-E5, and send AT command AT+ID=DevEui to get your Device EUI:
+### 2. Abrir en STM32CubeIDE
 
-<img width="271" alt="image" src="https://user-images.githubusercontent.com/942815/145845362-979a73a7-1e80-4a8b-911a-979d7df967b1.png">
+- Abrir STM32CubeIDE
+- Seleccionar **File → Open Projects from File System**
+- Navegar al directorio clonado
 
-- Do not lose this Device EUI; it is unique for each LoRaWAN device. If you manage to lose the Device EUI, you are able to retrieve it by scanning the QR code on the LoRa-E5 chip using a generic QR code scanner.
+### 3. Configurar credenciales LoRaWAN
 
-# Building the repo
+Abrir el archivo `Wedo-Energy.ioc` y configurar:
 
-- Clone this repo onto a system with STM32CubeIDE, v1.7.0 or later. Using "Open Projects From Filesystem"
+- **Device EUI** - Identificador único del dispositivo
+- **Application EUI** - Identificador de la aplicación
+- **Application Key** - Clave de cifrado
+- **Región LoRaWAN** - Seleccionar según tu ubicación (AU915, US915, EU868, etc.)
 
-<img width="275" alt="image" src="https://user-images.githubusercontent.com/942815/145841281-36e9181f-250d-4432-864e-ef5096f2731d.png">
+### 4. Compilar y programar
 
-- Locate and open the top-level directory of the cloned repo:
+- Compilar el proyecto (Ctrl+B)
+- Conectar el ST-LINK a los pines SWD
+- Programar el dispositivo (Run → Debug)
 
-<img width="134" alt="image" src="https://user-images.githubusercontent.com/942815/145841729-a7c1243e-06eb-4d5d-81ed-4a3109695db2.png">
+## Comandos Downlink
 
-- Modify your Device EUI, Application EUI, Application KEY and your LoRawan Region
+El dispositivo soporta los siguientes comandos via downlink en el **puerto 85**:
 
-- Use Cube to reconfigure the project to your LoRaWAN commissioning parameters:
+| Comando | Descripción |
+|---------|-------------|
+| `FF 03 XX XX` | Configurar intervalo de reporte (en segundos, big-endian) |
+| `FF 99 FF` | Reset del dispositivo (borra contexto LoRaWAN) |
 
-![image](https://user-images.githubusercontent.com/942815/145844142-675eb76c-7bb3-4991-9df4-8e86999afb3b.png)
+## Estructura del proyecto
 
-and
+```
+Wedo-Energy/
+├── Core/               # Código principal de la aplicación
+│   ├── Inc/            # Headers
+│   └── Src/            # Código fuente
+├── LoRaWAN/            # Stack LoRaWAN
+├── Drivers/            # Drivers HAL y BSP
+├── Middlewares/        # Middleware ST
+├── parser/             # Decodificadores para TTN y ChirpStack
+└── Wedo-Energy.ioc     # Configuración STM32CubeMX
+```
 
-![image](https://user-images.githubusercontent.com/942815/145844024-5a685612-e9ca-46f8-a8a8-25919aa81b03.png)
+## Parsers
 
-- Save the IOC file and generate code when prompted:
+En la carpeta `parser/` se incluyen decodificadores de payload para:
 
-<img width="477" alt="image" src="https://user-images.githubusercontent.com/942815/145848348-1f3722f7-1265-4442-8851-5d90d8161167.png">
+- **The Things Network V3** (`ttn_decoder.js`)
+- **ChirpStack V4** (`chirpstack_v4_decoder.js`)
 
-<img width="477" alt="image" src="https://user-images.githubusercontent.com/942815/145848405-9c149798-f944-4b62-be2c-e204ea618cf5.png">
+## Licencia
 
-- Note that generating code overwrites many files; in particular, if you've selected Hybrid Mode to operate a in a sub-band, you need to check and correct the channel mask after generating code - example here is for US915 Sub-band 2:
+Ver [LICENSE.md](LICENSE.md) para más detalles.
 
-![image](https://user-images.githubusercontent.com/942815/145849008-5042b29e-5772-4bd6-a7d0-ca22ff51df11.png)
+---
 
-- Build project and program it into the LoRa-E5
-
-<img width="184" alt="image" src="https://user-images.githubusercontent.com/942815/145849530-b4362b56-9a94-4ca7-8a5a-805bc0044b18.png">
-<img width="245" alt="image" src="https://user-images.githubusercontent.com/942815/145849464-3384556a-ce2e-4521-918a-dba60e583022.png">
-
-## Starting a new project
-
-- Use "Start a new project from an existing configuration file" and select "Seeed-LoRa-E5.ioc" in the repo
-
-<img width="613" alt="image" src="https://user-images.githubusercontent.com/942815/145850066-bbd75cbc-b373-4332-898d-0140b003da20.png">
-
-- This creates a new "End client framework" project with no user code (such as contained in the repo code) included. You'll want to refer to the repo code and ST documentation for using their LoRaWAN stack.
-
+Desarrollado por [Wedo IoT](https://github.com/we-do-iot)
